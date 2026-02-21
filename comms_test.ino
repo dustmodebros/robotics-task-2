@@ -1,3 +1,7 @@
+#include "LineSensors.h"
+
+LineSensors_c comms_beacons
+
 void setup() {
   // put your setup code here, to run once:
 
