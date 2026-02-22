@@ -1,6 +1,11 @@
 # robotics-task-2
 A repository to consolidate code for the "The Mark 4" group for the SEMTM0042-43 (Robotics) unit for Bristol University
 
+## Contributing (read this first)
+I don't want to fork over $4 per person per month to have branch protection, so rules are self enforced. For new features, *PLEASE PLEASE PLEASE* make a new branch from `dev`, and work on that branch, then PR into `dev` so any changes can be reviewed. Also please make sure that **any code that is pushed compiles**. If I find a handy arduino test library, I might write some automated tests, and they'll get a workflow. Broken code in `dev` will result in sadness, and broken code in `main` will result in floggings.
+
+I cba to enforce any silly commit message requirements, so go nuts as long as they mean *something* relevant to your code.
+
 ## Receive and Transmit
 To use the contents of this repo, first of all clone it, and open each of the transmit and receive .ino files in separate arduino windows.
 Then remove the chassis-s from two Pololu 3pi+ robots, and upload the code respectively to one and the other. You'll need batteries in the transmitter, and your receiver communicating over Serial.
