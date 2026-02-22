@@ -7,3 +7,16 @@ Then remove the chassis-s from two Pololu 3pi+ robots, and upload the code respe
 You should see the test bit of 0xFC transmitted and received, and you can see debug info by changing the DEBUG_STATES, DEBUG_OUTPUTS (Serial monitor) and DEBUG_INPUTS (Serial plotter).
 
 Happy RX/TXing!
+
+## How it works
+The transmission and reception works based on the principle of pulse-duration decoding. A pulse of a long duration encodes a 1, and a short duration encodes a 0. There's also a longer sync pulse so that the recipient can tell when a byte begins and ends.
+
+Right now the timings are as follows:
+SYNC_PULSE_MS   100 (signals a byte is about to be sent)
+SHORT_PULSE_MS   30 (0)
+LONG_PULSE_MS    60 (1)
+
+## Notes
+Going for a smaller timescale to up the bitrate seems to run into problems where we struggle to read the pulses due to the latency on reading the IR sensor, as well as delays caused by execution on the microcontroller.
+Unfortunately this limits us to a somewhat piddly ~1.4ish Bytes/sec. Additionally, going slower seems to make the connection less fiddly and precise.
+Experimentation is encouraged! It's probably possible to make the sync pulse like 20ms shorter without compromising accuracy... give it a try!
