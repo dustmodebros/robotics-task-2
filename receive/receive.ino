@@ -36,6 +36,9 @@ unsigned long now;
 byte data = 0x00;
 int received_bits = 0;
 
+// BASELINE SENSITIVITY
+#define BASELINE_UPDATE_RATIO 16
+
 void setup() {
   Serial.begin(115200);
   delay(2000); //wait for Serial
@@ -74,7 +77,7 @@ void loop() {
   unsigned long now = millis();
 
   // Slowly track ambient baseline
-  baseline = (baseline * 31 + measurement) / 32;
+  baseline = (baseline * (BASELINE_UPDATE_RATIO-1) + measurement) / BASELINE_UPDATE_RATIO;
 
   // Work based on a delta to avoid ambient conditions influencing signal quality
   long delta = measurement - baseline;
@@ -153,7 +156,7 @@ void loop() {
           // Here's where we output, or accumulate, or whatever... TODO perhaps? for now just print
           if (!DEBUG_INPUTS){
             Serial.print("received byte: 0x");
-            Serial.println(data, HEX);
+            Serial.println(data, BIN);
           }
           reset_state();
         } else {
