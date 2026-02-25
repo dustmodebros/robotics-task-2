@@ -23,12 +23,28 @@ void sendBit(bool bitVal) {
   delay(INTER_BIT_MS);
 }
 
+// Interleaved parity: bit0 = parity of even positions, bit1 = parity of odd positions
+byte interleavedParity(byte data) {
+  byte even_parity = 0;
+  byte odd_parity = 0;
+  for (int i = 0; i < 8; i += 2) {
+    even_parity ^= (data >> i) & 1;
+    odd_parity ^= (data >> (i + 1)) & 1;
+  }
+  return (odd_parity << 1) | even_parity;
+}
+
 void sendByte(byte data) {
   
   sendSync(SYNC_PULSE_MS);
   for (int i = 7; i >= 0; i--) {
     sendBit((data >> i) & 1);
   }
+  
+  // Send 2-bit checksum
+  byte checksum = interleavedParity(data);
+  sendBit((checksum >> 1) & 1);  // odd position parity
+  sendBit(checksum & 1);          // even position parity
 }
 
 void setup() {

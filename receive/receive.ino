@@ -12,10 +12,11 @@ int current_state = 0;
 #define DEBUG_REJECTION_REASON false
 #define DEBUG_STRENGTH false
 #define DEBUG_OUTPUTS false    // prints pulse durations (read and sync) to serial monitor
-#define DEBUG_INPUTS false    // prints raw sensor readings and indications of sync/read to plotter
+#define DEBUG_INPUTS true    // prints raw sensor readings and indications of sync/read to plotter
 #define DEBUG_STATES false     // prints what state the receiver is in
 int debug_currently_reading = 0;
 int debug_currently_syncing = 0;
+int debug_currently_checksum = 0;
 int debug_max_read = 0;
 
 // TRANSMIT PARAMETERS
@@ -38,6 +39,7 @@ unsigned long now;
 // OUTPUT VARIABLES
 byte data = 0x00;
 int received_bits = 0;
+byte received_checksum = 0;
 
 // BASELINE SENSITIVITY
 #define BASELINE_UPDATE_RATIO 16
@@ -49,7 +51,7 @@ void setup() {
   if (!DEBUG_INPUTS) {
     Serial.println("Receiver start");
   } else {
-    Serial.println("delta, read_status, sync_status"); // If we're using the Serial plotter, print column names
+    Serial.println("delta, read_status, sync_status, checksum_status"); // If we're using the Serial plotter, print column names
   }
   
   baseline = measureSensor();
@@ -58,7 +60,19 @@ void setup() {
 void reset_state() {
   data = 0;
   received_bits = 0;
+  received_checksum = 0;
   current_state = STATE_LISTENING;
+}
+
+// Interleaved parity: bit0 = parity of even positions, bit1 = parity of odd positions
+byte interleavedParity(byte data) {
+  byte even_parity = 0;
+  byte odd_parity = 0;
+  for (int i = 0; i < 8; i += 2) {
+    even_parity ^= (data >> i) & 1;
+    odd_parity ^= (data >> (i + 1)) & 1;
+  }
+  return (odd_parity << 1) | even_parity;
 }
 
 unsigned long measureSensor() {
@@ -95,6 +109,7 @@ void loop() {
       debug_currently_reading = 0;
       received_bits = 0;
       debug_currently_syncing = 0;
+      debug_currently_checksum = 0;
 
       if (delta > MIN_READING){
         current_state = STATE_SYNC;
@@ -105,6 +120,7 @@ void loop() {
     case STATE_SYNC: {
       received_bits = 0;
       debug_currently_reading = 0;
+      debug_currently_checksum = 0;
     
       // Detect falling edge
       if (delta < 0) {
@@ -129,13 +145,18 @@ void loop() {
     case STATE_MONITORING:
       debug_currently_syncing = 0;
       debug_currently_reading = 0;
+      debug_currently_checksum = 0;
       if (now > current_read + 1000){
         current_state = STATE_SYNC;
       }
       if (delta > MIN_READING){
         current_state = STATE_RECEIVING;
         current_read = now;  // mark pulse start
-        debug_currently_reading = 1000;
+        if (received_bits >= 8) {
+          debug_currently_checksum = 1000;
+        } else {
+          debug_currently_reading = 1000;
+        }
         if (DEBUG_STRENGTH and debug_max_read < delta){
           debug_max_read = delta;
         }
@@ -145,6 +166,7 @@ void loop() {
 
       if (delta < 0) {
         debug_currently_reading = 0;
+        debug_currently_checksum = 0;
         unsigned long pulseLength = now - current_read;
         if (DEBUG_OUTPUTS) Serial.print("pulse duration for read: ");
         if (DEBUG_OUTPUTS) Serial.println(pulseLength);
@@ -153,16 +175,35 @@ void loop() {
         if (pulseLength > LONG_PULSE_MS + PULSE_TOLERANCE){
           // Reject packet, wait for next sync
           if (DEBUG_REJECTION_REASON) Serial.println("REJECTED: data pulse was too long");
-          reset_state(); //clears data tracking globals and returns to STATE_LISTENING
+          reset_state();
           break;
         }
 
-        // Pack received bit into 'data'
-        data = (data << 1) | bit_r;
         received_bits++;
+        
+        if (received_bits <= 8) {
+          // Pack received bit into 'data'
+          data = (data << 1) | bit_r;
+        } else {
+          // Pack received bit into checksum (bits 9 and 10)
+          received_checksum = (received_checksum << 1) | bit_r;
+        }
     
-        if (received_bits == 8) {
-          // Here's where we output, or accumulate, or whatever... TODO perhaps? for now just print
+        if (received_bits == 10) {
+          // Validate checksum (interleaved parity)
+          byte expected_checksum = interleavedParity(data);
+          if (received_checksum != expected_checksum) {
+            if (DEBUG_REJECTION_REASON) {
+              Serial.print("REJECTED: checksum mismatch (expected ");
+              Serial.print(expected_checksum);
+              Serial.print(", got ");
+              Serial.print(received_checksum);
+              Serial.println(")");
+            }
+            reset_state();
+            break;
+          }
+          
           if (!DEBUG_INPUTS){
             Serial.print("received byte: 0x");
             Serial.println(data, BIN);
@@ -207,7 +248,9 @@ void loop() {
     Serial.print(",\t");
     Serial.print(debug_currently_reading);
     Serial.print(",\t");
-    Serial.println(debug_currently_syncing);
+    Serial.print(debug_currently_syncing);
+    Serial.print(",\t");
+    Serial.println(debug_currently_checksum);
   }
   
 }
