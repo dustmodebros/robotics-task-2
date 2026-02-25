@@ -9,19 +9,23 @@
 int current_state = 0;
 
 // DEBUG FLAGS AND VARIABLES
+#define DEBUG_REJECTION_REASON false
+#define DEBUG_STRENGTH false
 #define DEBUG_OUTPUTS false    // prints pulse durations (read and sync) to serial monitor
-#define DEBUG_INPUTS false    // prints raw sensor readings and indications of sync/read to plotter
+#define DEBUG_INPUTS true    // prints raw sensor readings and indications of sync/read to plotter
 #define DEBUG_STATES false     // prints what state the receiver is in
 int debug_currently_reading = 0;
 int debug_currently_syncing = 0;
+int debug_max_read = 0;
 
 // TRANSMIT PARAMETERS
 #define SYNC_PULSE_MS 100
 #define SHORT_PULSE_MS 30     // pulse length for 0. Don't go lower than 30, as then we run into read speed problems
 #define LONG_PULSE_MS  60     // pulse length for 1. 
+#define PULSE_TOLERANCE 5
 
 // READ SENSITIVITY
-#define MIN_READING 500
+#define MIN_READING 200
 long baseline = 0;
 
 // SYNC VARIABLES
@@ -73,6 +77,7 @@ unsigned long measureSensor() {
 }
 
 void loop() {
+  
   unsigned long measurement = measureSensor();
   unsigned long now = millis();
 
@@ -110,11 +115,12 @@ void loop() {
         if (DEBUG_OUTPUTS) Serial.println(pulse_duration);
 
         // Require between max sync pulse and min of max data length to avoid locking on incorrect signal timing
-        if (pulse_duration > LONG_PULSE_MS and pulse_duration <= SYNC_PULSE_MS) {
+        if (pulse_duration > LONG_PULSE_MS and pulse_duration <= SYNC_PULSE_MS + PULSE_TOLERANCE) { // add tolerance on top end because sometimes the pulse is read to be like 1ms longer
           if (DEBUG_OUTPUTS) Serial.println("SYNC LOCKED");
           current_state = STATE_MONITORING;
           current_read = now;
         } else {
+          if (DEBUG_REJECTION_REASON) Serial.println("REJECTED: Sync pulse incorrect timing");
           // If pulse isn't a sync, go back to listening state for another potential sync.
           current_state = STATE_LISTENING;
         }
@@ -131,6 +137,9 @@ void loop() {
         current_state = STATE_RECEIVING;
         current_read = now;  // mark pulse start
         debug_currently_reading = 1000;
+        if (DEBUG_STRENGTH and debug_max_read < delta){
+          debug_max_read = delta;
+        }
       }
       break;
     case STATE_RECEIVING:{
@@ -142,8 +151,9 @@ void loop() {
         if (DEBUG_OUTPUTS) Serial.println(pulseLength);
     
         bool bit_r = (pulseLength > SHORT_PULSE_MS);   
-        if (pulseLength > LONG_PULSE_MS){
+        if (pulseLength > LONG_PULSE_MS + PULSE_TOLERANCE){
           // Reject packet, wait for next sync
+          if (DEBUG_REJECTION_REASON) Serial.println("REJECTED: data pulse was too long");
           reset_state(); //clears data tracking globals and returns to STATE_LISTENING
           break;
         }
@@ -157,6 +167,11 @@ void loop() {
           if (!DEBUG_INPUTS){
             Serial.print("received byte: 0x");
             Serial.println(data, BIN);
+            if (DEBUG_STRENGTH) {
+              Serial.print("Max signal strength: ");
+              Serial.println(debug_max_read);
+            }
+            debug_max_read = 0;
           }
           reset_state();
         } else {
