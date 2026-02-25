@@ -52,13 +52,13 @@ class Transmitter {
     }
 
     void checkPadding() {
-      if (!padding) {return;}
+      if (!padding || millis() < padding_ts + padding_len_ms) {return;}
       padding = false;
       startInterBit();
     }
 
     void startPulse() {
-      pulse_len_ms = (myData >> bitNum) & 0b1 ? LONG_PULSE_MS : SHORT_PULSE_MS; // probably not needed, makes it nicer
+      pulse_len_ms = (myData >> bitNum) & 0b1 ? LONG_PULSE_MS : SHORT_PULSE_MS;
       pulsing = true;
       digitalWrite(EMIT_PIN, HIGH);
     }
