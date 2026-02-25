@@ -171,7 +171,7 @@ void loop() {
         if (DEBUG_OUTPUTS) Serial.print("pulse duration for read: ");
         if (DEBUG_OUTPUTS) Serial.println(pulseLength);
     
-        bool bit_r = (pulseLength > SHORT_PULSE_MS);   
+        bool bit_r = (pulseLength > SHORT_PULSE_MS + PULSE_TOLERANCE);   
         if (pulseLength > LONG_PULSE_MS + PULSE_TOLERANCE){
           // Reject packet, wait for next sync
           if (DEBUG_REJECTION_REASON) Serial.println("REJECTED: data pulse was too long");
@@ -194,10 +194,12 @@ void loop() {
           byte expected_checksum = interleavedParity(data);
           if (received_checksum != expected_checksum) {
             if (DEBUG_REJECTION_REASON) {
-              Serial.print("REJECTED: checksum mismatch (expected ");
-              Serial.print(expected_checksum);
-              Serial.print(", got ");
-              Serial.print(received_checksum);
+              Serial.print("REJECTED: checksum mismatch - received bits: ");
+              Serial.print(data, BIN);
+              Serial.print(", received checksum: ");
+              Serial.print(received_checksum, BIN);
+              Serial.print(" (expected ");
+              Serial.print(expected_checksum, BIN);
               Serial.println(")");
             }
             reset_state();
