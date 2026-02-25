@@ -6,4 +6,5 @@ PID.h
 lcd.h
 oled.h
 
+.vscode
 .DS_Store
