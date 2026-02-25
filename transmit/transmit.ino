@@ -1,45 +1,139 @@
 #define EMIT_PIN 11
 
-#define SYNC_PULSE_MS  100
-#define SHORT_PULSE_MS 30     // pulse length for 0
-#define LONG_PULSE_MS  60     // pulse length for 1
-#define INTER_BIT_MS   10    // space between bits
+// #define SYNC_PULSE_MS  100
+// #define SHORT_PULSE_MS 30     // pulse length for 0
+// #define LONG_PULSE_MS  60     // pulse length for 1
+// #define INTER_BIT_MS   10    // space between bits
 
-void sendSync(int check){
-  digitalWrite(EMIT_PIN, HIGH);
-  delay(SYNC_PULSE_MS);
-  digitalWrite(EMIT_PIN, LOW);
-  delay(10);
-}
+class Transmitter {
+  private:
+    int SYNC_PULSE_MS;
+    int SHORT_PULSE_MS;
+    int LONG_PULSE_MS;
+    int INTER_BIT_MS;
 
+    byte myData;
+    int bitNum;
 
-void sendBit(bool bitVal) {
-  unsigned long pulseLength = bitVal ? LONG_PULSE_MS : SHORT_PULSE_MS;
-  unsigned long padding = bitVal ? 0 : LONG_PULSE_MS - SHORT_PULSE_MS;
-  digitalWrite(EMIT_PIN, HIGH);
-  delay(pulseLength);
-  digitalWrite(EMIT_PIN, LOW);
-  delay(padding);
-  delay(INTER_BIT_MS);
-}
+    bool sending;
+    unsigned long send_byte_ts;
 
-void sendByte(byte data) {
+    bool pulsing;
+    unsigned long pulse_ts;
+    unsigned long pulse_len_ms;
+
+    bool padding;
+    unsigned long padding_ts;
+    unsigned long padding_len_ms;
+
+    bool syncing;
+    unsigned long sync_ts;
+    
+    bool inter_bit;
+    unsigned long inter_bit_ts;
+
+    void startInterBit() {
+      inter_bit = true;
+      digitalWrite(EMIT_PIN, LOW);
+      inter_bit_ts = millis();
+    }
+
+    // determines if we need to pad or not.
+    // adaptation of this line:
+    // unsigned long padding = bitVal ? 0 : LONG_PULSE_MS - SHORT_PULSE_MS;
+    void startPadding() {
+      digitalWrite(EMIT_PIN, LOW);
+      padding = !((myData >> bitNum) & 0b1);
+      //probably don't need this if condition but it saves on unnecessary assignments
+      if (padding) {
+        padding_len_ms = LONG_PULSE_MS - SHORT_PULSE_MS;
+        padding_ts = millis();
+      }
+    }
+
+    void checkPadding() {
+      if (!padding) {return;}
+      padding = false;
+      startInterBit();
+    }
+
+    void startPulse() {
+      pulse_len_ms = (myData >> bitNum) & 0b1 ? LONG_PULSE_MS : SHORT_PULSE_MS; // probably not needed, makes it nicer
+      pulsing = true;
+      digitalWrite(EMIT_PIN, HIGH);
+    }
+
+    void checkPulse() {
+      if (!pulsing || millis() < pulse_ts + pulse_len_ms) {return;}
+      pulsing = false;
+      startPadding();
+    }
+
+    void checkInterBit() {
+      if (!inter_bit || millis() < inter_bit_ts + INTER_BIT_MS) {return;}
+      inter_bit = false;
+      if (bitNum < 0) {
+        sending = false;
+        send_byte_ts = millis();
+      }
+      --bitNum;
+      startPulse();
+    }
+
+    void startSync() {
+      syncing = true;
+      sync_ts = millis();
+    }
+
+    void checkSync() {
+      if (!syncing || millis() < sync_ts + SYNC_PULSE_MS) {return;}
+      syncing = false;
+      startInterBit();
+    }
   
-  sendSync(SYNC_PULSE_MS);
-  for (int i = 7; i >= 0; i--) {
-    sendBit((data >> i) & 1);
-  }
-}
+  public:
+    Transmitter() {}
+
+    void init (int sync_pulse_ms, int short_pulse_ms, int long_pulse_ms, int inter_bit_ms) {
+      SYNC_PULSE_MS = sync_pulse_ms;
+      SHORT_PULSE_MS = short_pulse_ms;
+      LONG_PULSE_MS = long_pulse_ms;
+      INTER_BIT_MS = inter_bit_ms;
+      send_byte_ts = 0;
+      sending = false;
+    }
+    
+    // 1 second between transmissions
+    void sendByte(byte data) {
+      if (sending || send_byte_ts < millis() + 30) {return;}
+      sending = true;
+      myData = data;
+      bitNum = 7;
+      startSync();
+    }
+
+    void check() {
+      checkSync();
+      checkInterBit();
+      checkPulse();
+      checkPadding();
+    }
+};
+
+Transmitter transmitter;
+byte testByte;
 
 void setup() {
   pinMode(EMIT_PIN, OUTPUT);
   digitalWrite(EMIT_PIN, LOW);
+  transmitter.init(100, 30, 60, 10);
+  testByte = 0xFC; // example, 0x11111100
+
   Serial.begin(9600);
   delay(1000);
 }
 
 void loop() {
-  byte testByte = 0xFC;  // example, 0x11111100
-  sendByte(testByte);
-  delay(30);            // 1 second between transmissions
+  transmitter.sendByte(testByte);
+  transmitter.check();
 }
