@@ -84,10 +84,11 @@ class Transmitter {
         sending = false;
         return;
       }
-      startPulse();
+      startPulse(); // Only start pulsing if we still have any bits left to transmit.
     }
 
     void startSync() {
+      Serial.println("Syncing.");
       syncing = true;
       sync_ts = millis();
       digitalWrite(EMIT_PIN, HIGH);
