@@ -43,7 +43,6 @@ class Transmitter {
     }
 
     void startInterBit() {
-      Serial.println("Interbit");
       inter_bit = true;
       digitalWrite(EMIT_PIN, LOW);
       inter_bit_ts = millis();
