@@ -58,7 +58,7 @@ class Transmitter {
     void checkPadding() {
       if (!padding || millis() < padding_ts + padding_len_ms) {return;}
       padding = false;
-      --bitNum;
+      --bitNum; // move on to the next bit.
       startInterBit();
     }
 
@@ -100,7 +100,7 @@ class Transmitter {
     }
   
   public:
-    Transmitter() {}
+    Transmitter() {} // constructor. need this
 
     void init(int sync_pulse_ms, int short_pulse_ms, int long_pulse_ms, int inter_bit_ms) {
       SYNC_PULSE_MS = sync_pulse_ms;
