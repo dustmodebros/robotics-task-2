@@ -39,7 +39,7 @@ void setup() {
 }
 
 void loop() {
-  byte testByte = 0xAA;  // example, 0x11111100
+  byte testByte = 0xAA;  // example, 0x10101010
   sendByte(testByte);
   delay(30);            // 1 second between transmissions
 }
