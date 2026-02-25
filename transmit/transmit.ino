@@ -43,6 +43,7 @@ class Transmitter {
     }
 
     void startInterBit() {
+      Serial.println("Interbit");
       inter_bit = true;
       digitalWrite(EMIT_PIN, LOW);
       inter_bit_ts = millis();
@@ -88,7 +89,6 @@ class Transmitter {
     }
 
     void startSync() {
-      Serial.println("Syncing.");
       syncing = true;
       sync_ts = millis();
       digitalWrite(EMIT_PIN, HIGH);
