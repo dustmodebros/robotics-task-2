@@ -25,12 +25,12 @@ int debug_max_read = 0;
 #define PULSE_TOLERANCE 5
 
 // READ SENSITIVITY
-#define MIN_READING 200
+#define MIN_READING 300
 long baseline = 0;
+long last_read;
 
 // SYNC VARIABLES
 unsigned long sync_pulse_start = 0;
-bool sync_last_level = false;
 
 // TIMING VARIABLES
 unsigned long current_read;
@@ -86,6 +86,7 @@ void loop() {
 
   // Work based on a delta to avoid ambient conditions influencing signal quality
   long delta = measurement - baseline;
+  long delta_2 = delta - last_read;
 
   // Track prev state in case we want to DEBUG_STATES
   int prev_state = current_state;
@@ -97,7 +98,7 @@ void loop() {
       received_bits = 0;
       debug_currently_syncing = 0;
 
-      if (delta > MIN_READING){
+      if (delta_2 > MIN_READING){
         current_state = STATE_SYNC;
         debug_currently_syncing = 1000;
         sync_pulse_start = now;
@@ -108,7 +109,7 @@ void loop() {
       debug_currently_reading = 0;
     
       // Detect falling edge
-      if (delta < 0) {
+      if (delta_2 < -MIN_READING) {
         debug_currently_syncing = 0;
         unsigned long pulse_duration = now - sync_pulse_start;
         if (DEBUG_OUTPUTS) Serial.print("pulse duration for sync: ");
@@ -133,7 +134,7 @@ void loop() {
       if (now > current_read + 1000){
         current_state = STATE_SYNC;
       }
-      if (delta > MIN_READING){
+      if (delta_2 > MIN_READING){
         current_state = STATE_RECEIVING;
         current_read = now;  // mark pulse start
         debug_currently_reading = 1000;
@@ -144,7 +145,7 @@ void loop() {
       break;
     case STATE_RECEIVING:{
 
-      if (delta < 0) {
+      if (delta_2 < -MIN_READING) {
         debug_currently_reading = 0;
         unsigned long pulseLength = now - current_read;
         if (DEBUG_OUTPUTS) Serial.print("pulse duration for read: ");
@@ -181,6 +182,8 @@ void loop() {
       break;
     }
   }
+  
+  
 
   //Debug print zone
  
@@ -204,11 +207,13 @@ void loop() {
   }
   
   if (DEBUG_INPUTS){
-    Serial.print(delta);
-    Serial.print(",\t");
+//    Serial.print(delta);
+//    Serial.print(",\t");
     Serial.print(debug_currently_reading);
     Serial.print(",\t");
-    Serial.println(debug_currently_syncing);
+    Serial.print(debug_currently_syncing);
+    Serial.print(",\t");
+    Serial.println(delta - last_read);
   }
-  
+  last_read = delta;
 }
