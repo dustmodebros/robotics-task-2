@@ -88,6 +88,7 @@ class Transmitter {
     }
 
     void startSync() {
+      Serial.println("Syncing.");
       syncing = true;
       sync_ts = millis();
       digitalWrite(EMIT_PIN, HIGH);
