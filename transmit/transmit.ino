@@ -43,6 +43,7 @@ class Transmitter {
     }
 
     void startInterBit() {
+      Serial.println("Interbit");
       inter_bit = true;
       digitalWrite(EMIT_PIN, LOW);
       inter_bit_ts = millis();
@@ -64,6 +65,7 @@ class Transmitter {
 
     void startPulse() {
       pulse_len_ms = (myPayload >> bitNum) & 0b1 ? LONG_PULSE_MS : SHORT_PULSE_MS;
+      Serial.println((myPayload >> bitNum) & 0b1);
       pulsing = true;
       pulse_ts = millis();
       digitalWrite(EMIT_PIN, HIGH);
@@ -88,7 +90,6 @@ class Transmitter {
     }
 
     void startSync() {
-      Serial.println("Syncing.");
       syncing = true;
       sync_ts = millis();
       digitalWrite(EMIT_PIN, HIGH);
