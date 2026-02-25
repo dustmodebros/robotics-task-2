@@ -12,7 +12,7 @@ int current_state = 0;
 #define DEBUG_REJECTION_REASON false
 #define DEBUG_STRENGTH false
 #define DEBUG_OUTPUTS false    // prints pulse durations (read and sync) to serial monitor
-#define DEBUG_INPUTS true    // prints raw sensor readings and indications of sync/read to plotter
+#define DEBUG_INPUTS false    // prints raw sensor readings and indications of sync/read to plotter
 #define DEBUG_STATES false     // prints what state the receiver is in
 int debug_currently_reading = 0;
 int debug_currently_syncing = 0;
@@ -25,9 +25,8 @@ int debug_max_read = 0;
 #define PULSE_TOLERANCE 5
 
 // READ SENSITIVITY
-#define MIN_READING 300
+#define MIN_READING 200
 long baseline = 0;
-long last_read;
 
 // SYNC VARIABLES
 unsigned long sync_pulse_start = 0;
@@ -86,7 +85,6 @@ void loop() {
 
   // Work based on a delta to avoid ambient conditions influencing signal quality
   long delta = measurement - baseline;
-  long delta_2 = delta - last_read;
 
   // Track prev state in case we want to DEBUG_STATES
   int prev_state = current_state;
@@ -98,7 +96,7 @@ void loop() {
       received_bits = 0;
       debug_currently_syncing = 0;
 
-      if (delta_2 > MIN_READING){
+      if (delta > MIN_READING){
         current_state = STATE_SYNC;
         debug_currently_syncing = 1000;
         sync_pulse_start = now;
@@ -109,7 +107,7 @@ void loop() {
       debug_currently_reading = 0;
     
       // Detect falling edge
-      if (delta_2 < -MIN_READING) {
+      if (delta < 0) {
         debug_currently_syncing = 0;
         unsigned long pulse_duration = now - sync_pulse_start;
         if (DEBUG_OUTPUTS) Serial.print("pulse duration for sync: ");
@@ -134,7 +132,7 @@ void loop() {
       if (now > current_read + 1000){
         current_state = STATE_SYNC;
       }
-      if (delta_2 > MIN_READING){
+      if (delta > MIN_READING){
         current_state = STATE_RECEIVING;
         current_read = now;  // mark pulse start
         debug_currently_reading = 1000;
@@ -145,7 +143,7 @@ void loop() {
       break;
     case STATE_RECEIVING:{
 
-      if (delta_2 < -MIN_READING) {
+      if (delta < 0) {
         debug_currently_reading = 0;
         unsigned long pulseLength = now - current_read;
         if (DEBUG_OUTPUTS) Serial.print("pulse duration for read: ");
@@ -182,8 +180,6 @@ void loop() {
       break;
     }
   }
-  
-  
 
   //Debug print zone
  
@@ -207,13 +203,11 @@ void loop() {
   }
   
   if (DEBUG_INPUTS){
-//    Serial.print(delta);
-//    Serial.print(",\t");
+    Serial.print(delta);
+    Serial.print(",\t");
     Serial.print(debug_currently_reading);
     Serial.print(",\t");
-    Serial.print(debug_currently_syncing);
-    Serial.print(",\t");
-    Serial.println(delta - last_read);
+    Serial.println(debug_currently_syncing);
   }
-  last_read = delta;
+  
 }
