@@ -38,17 +38,12 @@ class Transmitter {
       inter_bit_ts = millis();
     }
 
-    // determines if we need to pad or not.
-    // adaptation of this line:
     // unsigned long padding = bitVal ? 0 : LONG_PULSE_MS - SHORT_PULSE_MS;
     void startPadding() {
       digitalWrite(EMIT_PIN, LOW);
-      padding = !((myData >> bitNum) & 0b1);
-      //probably don't need this if condition but it saves on unnecessary assignments
-      if (padding) {
-        padding_len_ms = LONG_PULSE_MS - SHORT_PULSE_MS;
-        padding_ts = millis();
-      }
+      padding = true;
+      padding_len_ms = (myData >> bitNum) & 0b1 ? 0 : LONG_PULSE_MS - SHORT_PULSE_MS;
+      padding_ts = millis();
     }
 
     void checkPadding() {
