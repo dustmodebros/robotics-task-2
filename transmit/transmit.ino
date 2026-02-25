@@ -38,7 +38,6 @@ class Transmitter {
       inter_bit_ts = millis();
     }
 
-    // unsigned long padding = bitVal ? 0 : LONG_PULSE_MS - SHORT_PULSE_MS;
     void startPadding() {
       digitalWrite(EMIT_PIN, LOW);
       padding = true;
@@ -49,6 +48,7 @@ class Transmitter {
     void checkPadding() {
       if (!padding || millis() < padding_ts + padding_len_ms) {return;}
       padding = false;
+      --bitNum;
       startInterBit();
     }
 
@@ -67,11 +67,8 @@ class Transmitter {
     void checkInterBit() {
       if (!inter_bit || millis() < inter_bit_ts + INTER_BIT_MS) {return;}
       inter_bit = false;
-      if (bitNum < 0) {
-        sending = false;
-        send_byte_ts = millis();
-      }
-      --bitNum;
+
+      if (bitNum < 0) {return;}
       startPulse();
     }
 
