@@ -166,7 +166,7 @@ byte testByte;
 void setup() {
   pinMode(EMIT_PIN, OUTPUT);
   digitalWrite(EMIT_PIN, LOW);
-  transmitter.init(90, 20, 30, 60, 10);  // sync=90ms, post-sync=20ms, short=30ms, long=60ms, inter-bit=10ms
+  transmitter.init(100, 50, 30, 60, 10);  // sync=90ms, post-sync=20ms, short=30ms, long=60ms, inter-bit=10ms
   testByte = 0xAA;
 
   Serial.begin(9600);
