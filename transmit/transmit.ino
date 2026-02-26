@@ -1,6 +1,6 @@
 #define EMIT_PIN 11
 
-#define SYNC_PULSE_MS  100
+#define SYNC_PULSE_MS  90
 #define SHORT_PULSE_MS 30     // pulse length for 0
 #define LONG_PULSE_MS  60     // pulse length for 1
 #define INTER_BIT_MS   10    // space between bits
@@ -41,7 +41,7 @@ void sendByte(byte data) {
     sendBit((data >> i) & 1);
   }
   
-  // Send 2-bit checksum
+  // Send 2-bit checksum (interleaved parity)
   byte checksum = interleavedParity(data);
   sendBit((checksum >> 1) & 1);  // odd position parity
   sendBit(checksum & 1);          // even position parity

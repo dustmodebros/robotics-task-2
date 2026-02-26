@@ -1,5 +1,7 @@
-// RECEIVE PIN
+// RECEIVE PINS
 #define LS_LEFT_PIN 4
+#define LS_RIGHT_PIN 5
+int active_pin = LS_LEFT_PIN;  // Which pin to use for current byte
 
 // RECEIVER STATE MACHINE
 #define STATE_LISTENING 0     // look for pulse
@@ -12,7 +14,7 @@ int current_state = 0;
 #define DEBUG_REJECTION_REASON false
 #define DEBUG_STRENGTH false
 #define DEBUG_OUTPUTS false    // prints pulse durations (read and sync) to serial monitor
-#define DEBUG_INPUTS true    // prints raw sensor readings and indications of sync/read to plotter
+#define DEBUG_INPUTS false    // prints raw sensor readings and indications of sync/read to plotter
 #define DEBUG_STATES false     // prints what state the receiver is in
 int debug_currently_reading = 0;
 int debug_currently_syncing = 0;
@@ -20,14 +22,15 @@ int debug_currently_checksum = 0;
 int debug_max_read = 0;
 
 // TRANSMIT PARAMETERS
-#define SYNC_PULSE_MS 100
+#define SYNC_PULSE_MS 90
 #define SHORT_PULSE_MS 30     // pulse length for 0. Don't go lower than 30, as then we run into read speed problems
 #define LONG_PULSE_MS  60     // pulse length for 1. 
 #define PULSE_TOLERANCE 5
 
 // READ SENSITIVITY
 #define MIN_READING 200
-long baseline = 0;
+long baseline_left = 0;
+long baseline_right = 0;
 
 // SYNC VARIABLES
 unsigned long sync_pulse_start = 0;
@@ -54,7 +57,8 @@ void setup() {
     Serial.println("delta, read_status, sync_status, checksum_status"); // If we're using the Serial plotter, print column names
   }
   
-  baseline = measureSensor();
+  baseline_left = measureSensor(LS_LEFT_PIN);
+  baseline_right = measureSensor(LS_RIGHT_PIN);
 }
 
 void reset_state() {
@@ -75,28 +79,50 @@ byte interleavedParity(byte data) {
   return (odd_parity << 1) | even_parity;
 }
 
-unsigned long measureSensor() {
+unsigned long measureSensor(int pin) {
   // Do digital light sensor read via capacitor method
-  pinMode(LS_LEFT_PIN, OUTPUT);
-  digitalWrite(LS_LEFT_PIN, HIGH);
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, HIGH);
   delayMicroseconds(10); // should be a small enough block to avoid screwing with anything timing based... 
-  pinMode(LS_LEFT_PIN, INPUT);
+  pinMode(pin, INPUT);
 
   unsigned long start_time = micros();
-  while (digitalRead(LS_LEFT_PIN) == HIGH) {
+  while (digitalRead(pin) == HIGH) {
     if (micros() - start_time > 16000) break; //timeout if read is taking too long (low light)
   }
   return micros() - start_time;
 }
 
+void selectBestPin() {
+  // Measure both sensors and pick the one with the higher delta
+  unsigned long left_measurement = measureSensor(LS_LEFT_PIN);
+  unsigned long right_measurement = measureSensor(LS_RIGHT_PIN);
+  
+  long left_delta = left_measurement - baseline_left;
+  long right_delta = right_measurement - baseline_right;
+  
+  if (right_delta > left_delta) {
+    active_pin = LS_RIGHT_PIN;
+  } else {
+    active_pin = LS_LEFT_PIN;
+  }
+}
+
 void loop() {
   
-  unsigned long measurement = measureSensor();
+  // Measure both sensors and update baselines
+  unsigned long measurement_left = measureSensor(LS_LEFT_PIN);
+  unsigned long measurement_right = measureSensor(LS_RIGHT_PIN);
   unsigned long now = millis();
 
-  // Slowly track ambient baseline
-  baseline = (baseline * (BASELINE_UPDATE_RATIO-1) + measurement) / BASELINE_UPDATE_RATIO;
+  // Slowly track ambient baseline for both sensors
+  baseline_left = (baseline_left * (BASELINE_UPDATE_RATIO-1) + measurement_left) / BASELINE_UPDATE_RATIO;
+  baseline_right = (baseline_right * (BASELINE_UPDATE_RATIO-1) + measurement_right) / BASELINE_UPDATE_RATIO;
 
+  // Use the active pin's measurement and baseline for delta calculation
+  unsigned long measurement = (active_pin == LS_LEFT_PIN) ? measurement_left : measurement_right;
+  long baseline = (active_pin == LS_LEFT_PIN) ? baseline_left : baseline_right;
+  
   // Work based on a delta to avoid ambient conditions influencing signal quality
   long delta = measurement - baseline;
 
@@ -132,6 +158,7 @@ void loop() {
         // Require between max sync pulse and min of max data length to avoid locking on incorrect signal timing
         if (pulse_duration > LONG_PULSE_MS and pulse_duration <= SYNC_PULSE_MS + PULSE_TOLERANCE) { // add tolerance on top end because sometimes the pulse is read to be like 1ms longer
           if (DEBUG_OUTPUTS) Serial.println("SYNC LOCKED");
+          selectBestPin();  // Select the best pin for this byte
           current_state = STATE_MONITORING;
           current_read = now;
         } else {
@@ -208,7 +235,9 @@ void loop() {
           
           if (!DEBUG_INPUTS){
             Serial.print("received byte: 0x");
-            Serial.println(data, BIN);
+            Serial.print(data, BIN);
+            Serial.print(" from ");
+            Serial.println(active_pin == LS_LEFT_PIN ? "Left" : "Right");
             if (DEBUG_STRENGTH) {
               Serial.print("Max signal strength: ");
               Serial.println(debug_max_read);
