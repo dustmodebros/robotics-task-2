@@ -64,7 +64,6 @@ class Transmitter {
 
     void startPulse() {
       pulse_len_ms = (myPayload >> bitNum) & 0b1 ? LONG_PULSE_MS : SHORT_PULSE_MS;
-      Serial.println((myPayload >> bitNum) & 0b1);
       pulsing = true;
       pulse_ts = millis();
       digitalWrite(EMIT_PIN, HIGH);
