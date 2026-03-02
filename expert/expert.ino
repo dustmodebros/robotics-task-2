@@ -16,16 +16,7 @@
 // Encoders.h does not need modifying.
 #include "Encoders.h"     // For encoder counts
 
-
-// If you want to use one of the Display modules for
-// your robot, please read Supplementary Labsheet 4.
-// BLUE display
-#include "oled.h"
-OLED_c display(1, 30, 0, 17, 13);
-
-
 Motors_c motors;
-
 
 LineSensors_c line_sensors;
 Magnetometer_c magnetometer;
