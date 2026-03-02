@@ -8,11 +8,9 @@
 #include "Encoders.h"
 
 Motors_c motors;
-
 LineSensors_c line_sensors;
 Magnetometer_c magnetometer;
 LIS3MDL mag;
-
 Kinematics_c pose;
 
 // --- GLOBAL VARIABLES ---
@@ -94,20 +92,20 @@ unsigned long waypoint_drift_ts = 0;
 
 // FSM
 typedef enum{
-  STATE_SEARCH,
-  STATE_FOUND_CUP,
-  STATE_BACKING_UP,
-  STATE_GOTO_BEHIND_CUP,
-  STATE_DETOUR,
-  STATE_STRAIGHT_TO_BEHIND,
-  STATE_POINT_AT_ORIGIN,
-  STATE_GOTO_ORIGIN,
-  STATE_WAIT_FOR_RESET,
-  STATE_FINISHED,
-  STATE_DEBUG = 413
+  SEARCH,
+  FOUND_CUP,
+  BACKING_UP,
+  GOTO_BEHIND_CUP,
+  DETOUR,
+  STRAIGHT_TO_BEHIND,
+  POINT_AT_ORIGIN,
+  GOTO_ORIGIN,
+  WAIT_FOR_RESET,
+  FINISHED,
+  DEBUG = 413
 } state;
 
-int current_state = 0;
+state current_state;
 float alignment_target_x;
 float alignment_target_y; //the point behind the cup
 float pathway_x;
@@ -369,6 +367,8 @@ void setup() {
 
   pose.initialise(0, 0, 0);
 
+  current_state = SEARCH;
+
   // Activates the Serial port, and the delay
   // is used to wait for the connection to be
   // established.
@@ -385,35 +385,24 @@ void setup() {
     }
   }
   mag.enableDefault();
-  
-  // If you are using an OLED or LCD display,
-  // the following will set up a count down
-  // timer to be displayed.
-  display.setMaxMinutes(4);
-  display.startStopwatch();
 
-  left_pid.initialise( 0.3, 0.001, 0.0 ); // tuned values
-  right_pid.initialise( 0.31, 0.001, 0.0 );
-  heading.initialise( 0.7, 0.00, 0.0); 
+  left_pid.initialise(0.3, 0.001, 0.0); // tuned values
+  right_pid.initialise(0.31, 0.001, 0.0);
+  heading.initialise(0.7, 0.0, 0.0); 
 
   pid_update_ts = millis();
 
   left_pid.reset(); // needed because we delay to wait for the serial connection, that phutzes with timing
   right_pid.reset();
 
-  
-
   calibrateSensors();
-//  target_angle = PI/2;
-//  setTravel(69.83, 269.21);
 }
 
 void loop() {
-  // Finish when display timer runs out (display.setMaxMinutes(4) in setup)
-  if (!display.timeRemaining()) {
-    display.showDone();
-    current_state = FINISHED;
-  }
+  // if (!display.timeRemaining()) { // need to replace with internal timer.
+  //   display.showDone();
+  //   current_state = FINISHED;
+  // }
 
   // Wait for demand to be enabled after initialisation delay
   if (!enable_demand && millis() > enable_demand_ts + enable_demand_ms) {
@@ -437,12 +426,9 @@ void loop() {
     }
     origin_y -= WAYPOINT_DRIFT_RATE_MM_S;
   }
-//  if (checkTravel()) {
-//    setTravel(0, 0);
-//  }
 
   switch (current_state){
-    case STATE_SEARCH:
+    case SEARCH:
 //      Serial.println("in STATE_SEARCH");
       //search behaviour
       
@@ -451,27 +437,27 @@ void loop() {
         setTravel(waypoints_x[current_waypoint % 7], waypoints_y[current_waypoint % 7]);
       }
       if (convertToMagnitude() > 2.7){
-        current_state = STATE_FOUND_CUP;
+        current_state = FOUND_CUP;
         enable_demand_ts = millis() - enable_demand_ms + 500;
         enable_demand = false;
         motors.setPWM(0,0);
       }
       break;
-    case STATE_FOUND_CUP:
+    case FOUND_CUP:
 //      Serial.println("in STATE_FOUND_CUP");
       
       setTurn(-0.2,0,400);
-      current_state = STATE_BACKING_UP;
+      current_state = BACKING_UP;
       
       //do alignment
       break;
-    case STATE_BACKING_UP:
+    case BACKING_UP:
 //      Serial.println("in STATE_BACKING_UP");
       if (checkMoving()){
-        current_state = STATE_GOTO_BEHIND_CUP;
+        current_state = GOTO_BEHIND_CUP;
       }
       break;
-    case STATE_GOTO_BEHIND_CUP: {
+    case GOTO_BEHIND_CUP: {
 //      Serial.println("in STATE_GOTO_BEHIND_CUP");
       float cup_location_x = waypoints_x[current_waypoint % 7];
       float cup_location_y = waypoints_y[current_waypoint % 7];
@@ -482,24 +468,6 @@ void loop() {
       float potential_x_2 = cup_location_x + sin(cup_theta) * CUP_AVOIDANCE_AMOUNT;
       float potential_y_1 = cup_location_y + cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
       float potential_y_2 = cup_location_y - cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
-      /*
-      Serial.print("cup location: ");
-      Serial.print(cup_location_x);
-      Serial.print(", ");
-      Serial.println(cup_location_y);
-      Serial.print("alignment point: ");
-      Serial.print(alignment_target_x);
-      Serial.print(", ");
-      Serial.println(alignment_target_y);
-      Serial.print("potential waypoint 1: ");
-      Serial.print(potential_x_1);
-      Serial.print(", ");
-      Serial.println(potential_y_1);
-      Serial.print("potential waypoint 2: ");
-      Serial.print(potential_x_2);
-      Serial.print(", ");
-      Serial.println(potential_y_2);
-      */
 
       // pathway waypoint will be whichever of the potentials is closest to the current pose x and y
       float distance_target = sqrt(pow(alignment_target_x - pose.x, 2) + pow(alignment_target_y - pose.y, 2));
@@ -507,7 +475,7 @@ void loop() {
       float distance_potential_2 = sqrt(pow(potential_x_2 - pose.x, 2) + pow(potential_y_2 - pose.y, 2));
       if (distance_target < distance_potential_1 and distance_target < distance_potential_2){
 //        Serial.println("Going straight to the alignment point");
-        current_state = STATE_STRAIGHT_TO_BEHIND;
+        current_state = STRAIGHT_TO_BEHIND;
       } else {
         if (distance_potential_1 < distance_potential_2){
 //          Serial.println("Going through alignment point 1");
@@ -518,41 +486,38 @@ void loop() {
           pathway_x = potential_x_2;
           pathway_y = potential_y_2;
         }
-        current_state = STATE_DETOUR;
+        current_state = DETOUR;
       }
       break;
     }
-    case STATE_DETOUR:
-//      Serial.println("in STATE_DETOUR");
+    case DETOUR:
       setTravel(pathway_x, pathway_y);
       if(checkTravel()){
-        current_state = STATE_STRAIGHT_TO_BEHIND;
+        current_state = STRAIGHT_TO_BEHIND;
       }
       break;
-    case STATE_STRAIGHT_TO_BEHIND:
-//      Serial.println("in STATE_STRAIGHT_TO_BEHIND");
-
+    case STRAIGHT_TO_BEHIND:
       setTravel(alignment_target_x, alignment_target_y);
       if(checkTravel()){
-        current_state = STATE_POINT_AT_ORIGIN;
+        current_state = POINT_AT_ORIGIN;
       }
       break;
-    case STATE_POINT_AT_ORIGIN:
+    case POINT_AT_ORIGIN:
       target_angle = atan2(-pose.x, -pose.y);
       if(checkTurn()){
-        current_state = STATE_GOTO_ORIGIN;
+        current_state = GOTO_ORIGIN;
       }
       break;
-    case STATE_GOTO_ORIGIN:
+    case GOTO_ORIGIN:
       setTravel(0, origin_y);
       if (checkTravel(90)) {  // Stop when within 90mm of origin to avoid pushing cup out of end zone
         now = millis();
-        current_state = STATE_WAIT_FOR_RESET;
+        current_state = WAIT_FOR_RESET;
       }
       break;
-    case STATE_WAIT_FOR_RESET:
+    case WAIT_FOR_RESET:
       if (now + 4000 < millis()){
-        current_state = STATE_SEARCH;
+        current_state = SEARCH;
         current_waypoint = 0;
       }
       break;
