@@ -38,6 +38,8 @@ class Receiver {
     int longPulseMs;
     int pulseTolerance;
     int minReading;
+
+    bool debug;
   
     
   
@@ -85,7 +87,7 @@ class Receiver {
   public:
   
     void init(int syncMs, int shortMs, int longMs,
-              int tolerance, int minRead) {
+              int tolerance, int minRead, bool debugFlag = false) {
   
       syncPulseMs = syncMs;
       shortPulseMs = shortMs;
@@ -98,6 +100,8 @@ class Receiver {
   
       activePin = LS_LEFT_PIN;
   
+      debug = debugFlag;
+
       byteAvailable = false;
       resetState();
     }
@@ -121,6 +125,11 @@ class Receiver {
         (activePin == LS_LEFT_PIN) ? baselineLeft : baselineRight;
   
       long delta = measurement - baseline;
+
+      if (debug){
+        Serial.println(delta);
+      }
+      
   
       switch (currentState) {
   

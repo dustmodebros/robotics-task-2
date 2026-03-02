@@ -31,7 +31,8 @@ void setup() {
     30,    // short pulse ms
     60,    // long pulse ms
     2,     // pulse tolerance ms
-    200    // minimum delta threshold
+    200,    // minimum delta threshold
+    true   // debug flag
   );
 
   Serial.println("Receiver initialised.");
