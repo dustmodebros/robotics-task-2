@@ -158,6 +158,10 @@ class Transmitter {
       checkPulse();
       checkPadding();
     }
+
+    bool isSending() {
+      return sending;
+    }
 };
 
 //Transmitter transmitter;

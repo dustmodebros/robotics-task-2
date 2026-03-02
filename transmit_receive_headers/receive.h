@@ -39,7 +39,18 @@ class Receiver {
     int pulseTolerance;
     int minReading;
 
-    bool debug;
+    // Debug flags
+    bool debugRejectionReason;
+    bool debugStrength;
+    bool debugOutputs;
+    bool debugInputs;
+    bool debugStates;
+
+    // Debug variables
+    int debugCurrentlyReading;
+    int debugCurrentlySyncing;
+    int debugCurrentlyChecksum;
+    int debugMaxRead;
   
     
   
@@ -87,7 +98,10 @@ class Receiver {
   public:
   
     void init(int syncMs, int shortMs, int longMs,
-              int tolerance, int minRead, bool debugFlag = false) {
+              int tolerance, int minRead,
+              bool dbgRejection = false, bool dbgStrength = false,
+              bool dbgOutputs = false, bool dbgInputs = false,
+              bool dbgStates = false) {
   
       syncPulseMs = syncMs;
       shortPulseMs = shortMs;
@@ -100,10 +114,23 @@ class Receiver {
   
       activePin = LS_LEFT_PIN;
   
-      debug = debugFlag;
+      debugRejectionReason = dbgRejection;
+      debugStrength = dbgStrength;
+      debugOutputs = dbgOutputs;
+      debugInputs = dbgInputs;
+      debugStates = dbgStates;
+
+      debugCurrentlyReading = 0;
+      debugCurrentlySyncing = 0;
+      debugCurrentlyChecksum = 0;
+      debugMaxRead = 0;
 
       byteAvailable = false;
       resetState();
+
+      if (debugInputs) {
+        Serial.println("delta, read_status, sync_status, checksum_status");
+      }
     }
   
     State check() {
@@ -126,49 +153,86 @@ class Receiver {
   
       long delta = measurement - baseline;
 
-      if (debug){
-        Serial.println(delta);
-      }
-      
+      State prevState = currentState;
   
       switch (currentState) {
   
         case STATE_LISTENING:
+          debugCurrentlyReading = 0;
+          receivedBits = 0;
+          debugCurrentlySyncing = 0;
+          debugCurrentlyChecksum = 0;
+
           if (delta > minReading) {
             currentState = STATE_SYNC;
+            debugCurrentlySyncing = 1000;
             syncPulseStart = now;
           }
           break;
   
         case STATE_SYNC:
+          receivedBits = 0;
+          debugCurrentlyReading = 0;
+          debugCurrentlyChecksum = 0;
+
           if (delta < 0) {
+            debugCurrentlySyncing = 0;
             unsigned long duration = now - syncPulseStart;
+
+            if (debugOutputs) {
+              Serial.print("pulse duration for sync: ");
+              Serial.println(duration);
+            }
   
             if (duration > longPulseMs &&
                 duration <= syncPulseMs + pulseTolerance) {
-              // TODO do we still want to do this if we're doing both?
+              if (debugOutputs) Serial.println("SYNC LOCKED");
               selectBestPin();
               currentState = STATE_MONITORING;
               currentRead = now;
             } else {
+              if (debugRejectionReason) Serial.println("REJECTED: Sync pulse incorrect timing");
               resetState();
             }
           }
           break;
   
         case STATE_MONITORING:
+          debugCurrentlySyncing = 0;
+          debugCurrentlyReading = 0;
+          debugCurrentlyChecksum = 0;
+
+          if (now > currentRead + 1000) {
+            currentState = STATE_SYNC;
+          }
           if (delta > minReading) {
             currentState = STATE_RECEIVING;
             currentRead = now;
+            if (receivedBits >= 8) {
+              debugCurrentlyChecksum = 1000;
+            } else {
+              debugCurrentlyReading = 1000;
+            }
+            if (debugStrength && debugMaxRead < delta) {
+              debugMaxRead = delta;
+            }
           }
           break;
   
         case STATE_RECEIVING:
           if (delta < 0) {
+            debugCurrentlyReading = 0;
+            debugCurrentlyChecksum = 0;
   
             unsigned long pulseLen = now - currentRead;
+
+            if (debugOutputs) {
+              Serial.print("pulse duration for read: ");
+              Serial.println(pulseLen);
+            }
   
             if (pulseLen > longPulseMs + pulseTolerance) {
+              if (debugRejectionReason) Serial.println("REJECTED: data pulse was too long");
               resetState();
               break;
             }
@@ -192,6 +256,28 @@ class Receiver {
               if (receivedChecksum == expected) {
                 receivedByte = data;
                 byteAvailable = true;
+
+                if (!debugInputs) {
+                  Serial.print("received byte: 0x");
+                  Serial.print(data, BIN);
+                  Serial.print(" from ");
+                  Serial.println(activePin == LS_LEFT_PIN ? "Left" : "Right");
+                  if (debugStrength) {
+                    Serial.print("Max signal strength: ");
+                    Serial.println(debugMaxRead);
+                  }
+                  debugMaxRead = 0;
+                }
+              } else {
+                if (debugRejectionReason) {
+                  Serial.print("REJECTED: checksum mismatch - received bits: ");
+                  Serial.print(data, BIN);
+                  Serial.print(", received checksum: ");
+                  Serial.print(receivedChecksum, BIN);
+                  Serial.print(" (expected ");
+                  Serial.print(expected, BIN);
+                  Serial.println(")");
+                }
               }
   
               resetState();
@@ -201,6 +287,36 @@ class Receiver {
           }
           break;
       }
+
+      if (debugStates) {
+        if (prevState != currentState) {
+          switch (currentState) {
+            case STATE_LISTENING:
+              Serial.println("in STATE_LISTENING");
+              break;
+            case STATE_SYNC:
+              Serial.println("in STATE_SYNC");
+              break;
+            case STATE_MONITORING:
+              Serial.println("in STATE_MONITORING");
+              break;
+            case STATE_RECEIVING:
+              Serial.println("in STATE_RECEIVING");
+              break;
+          }
+        }
+      }
+
+      if (debugInputs) {
+        Serial.print(delta);
+        Serial.print(",\t");
+        Serial.print(debugCurrentlyReading);
+        Serial.print(",\t");
+        Serial.print(debugCurrentlySyncing);
+        Serial.print(",\t");
+        Serial.println(debugCurrentlyChecksum);
+      }
+
       return currentState;
     }
   

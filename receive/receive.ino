@@ -14,7 +14,7 @@ int current_state = 0;
 #define DEBUG_REJECTION_REASON false
 #define DEBUG_STRENGTH false
 #define DEBUG_OUTPUTS false    // prints pulse durations (read and sync) to serial monitor
-#define DEBUG_INPUTS false    // prints raw sensor readings and indications of sync/read to plotter
+#define DEBUG_INPUTS true    // prints raw sensor readings and indications of sync/read to plotter
 #define DEBUG_STATES false     // prints what state the receiver is in
 int debug_currently_reading = 0;
 int debug_currently_syncing = 0;

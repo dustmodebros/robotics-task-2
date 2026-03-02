@@ -1,66 +1,50 @@
-#include "transmit.h"
-#include "receive.h"
-
+#include "transceiver.h"
 
 // ==========================
-// DEFINE YOUR SENSOR PINS
+// CREATE TRANSCEIVER
 // ==========================
 
-#define LS_LEFT_PIN   4   
-#define LS_RIGHT_PIN  5   
-
-// ==========================
-// CREATE RECEIVER
-// ==========================
-
-Receiver receiver;
-
-// Optional: track state changes for debug
-int lastState = -1;
+Transceiver transceiver;
 
 void setup() {
 
   Serial.begin(115200);
   delay(2000);
 
-  Serial.println("Receiver Test Starting...");
+  Serial.println("Transceiver Test Starting...");
 
-  // init(syncMs, shortMs, longMs, tolerance, minReading)
-  receiver.init(
-    100,   // sync pulse ms
-    30,    // short pulse ms
-    60,    // long pulse ms
-    2,     // pulse tolerance ms
+  // init(syncMs, postSyncMs, shortMs, longMs, interBitMs, tolerance, minReading,
+  //      autoAck, dbgProtocol, dbgRejection, dbgStrength, dbgOutputs, dbgInputs, dbgStates)
+  transceiver.init(
+    100,    // sync pulse ms
+    50,     // post-sync ms
+    30,     // short pulse ms
+    60,     // long pulse ms
+    10,     // inter-bit ms
+    2,      // pulse tolerance ms
     200,    // minimum delta threshold
-    true   // debug flag
+    true,   // autoAck - automatically send ACK after receiving
+    true,   // debugProtocol - prints transceiver state changes
+    false,  // debugRejectionReason - prints why packets are rejected
+    false,  // debugStrength - prints max signal strength
+    false,  // debugOutputs - prints pulse durations
+    false,  // debugInputs - prints raw sensor readings to serial plotter
+    false   // debugStates - prints receiver state changes
   );
 
-  Serial.println("Receiver initialised.");
+  Serial.println("Transceiver initialised.");
 }
 
 void loop() {
 
-  
+  // Run the transceiver state machine
+  transceiver.check();
 
-  // ==========================
-  // DEBUG: Print state changes
-  // ==========================
-  int currentState = receiver.check();
+  // Check if a byte was received
+  if (transceiver.available()) {
+    byte b = transceiver.read();
 
-  if (currentState != lastState) {
-    Serial.print("State changed to: ");
-    Serial.println(currentState);
-    lastState = currentState;
-  }
-
-  // ==========================
-  // If byte received
-  // ==========================
-  if (receiver.available()) {
-
-    byte b = receiver.read();
-
-    Serial.print("Received byte: 0x");
+    Serial.print("Got byte: 0x");
     Serial.print(b, HEX);
     Serial.print(" (");
     Serial.print(b, BIN);
