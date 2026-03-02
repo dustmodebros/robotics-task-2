@@ -50,13 +50,13 @@ byte received_checksum = 0;
 void setup() {
   Serial.begin(115200);
   delay(2000); //wait for Serial
-  
+
   if (!DEBUG_INPUTS) {
     Serial.println("Receiver start");
   } else {
     Serial.println("delta, read_status, sync_status, checksum_status"); // If we're using the Serial plotter, print column names
   }
-  
+
   baseline_left = measureSensor(LS_LEFT_PIN);
   baseline_right = measureSensor(LS_RIGHT_PIN);
 }
@@ -83,7 +83,7 @@ unsigned long measureSensor(int pin) {
   // Do digital light sensor read via capacitor method
   pinMode(pin, OUTPUT);
   digitalWrite(pin, HIGH);
-  delayMicroseconds(10); // should be a small enough block to avoid screwing with anything timing based... 
+  delayMicroseconds(10); // should be a small enough block to avoid screwing with anything timing based...
   pinMode(pin, INPUT);
 
   unsigned long start_time = micros();
@@ -97,10 +97,10 @@ void selectBestPin() {
   // Measure both sensors and pick the one with the higher delta
   unsigned long left_measurement = measureSensor(LS_LEFT_PIN);
   unsigned long right_measurement = measureSensor(LS_RIGHT_PIN);
-  
+
   long left_delta = left_measurement - baseline_left;
   long right_delta = right_measurement - baseline_right;
-  
+
   if (right_delta > left_delta) {
     active_pin = LS_RIGHT_PIN;
   } else {
@@ -109,20 +109,20 @@ void selectBestPin() {
 }
 
 void loop() {
-  
+
   // Measure both sensors and update baselines
   unsigned long measurement_left = measureSensor(LS_LEFT_PIN);
   unsigned long measurement_right = measureSensor(LS_RIGHT_PIN);
   unsigned long now = millis();
 
   // Slowly track ambient baseline for both sensors
-  baseline_left = (baseline_left * (BASELINE_UPDATE_RATIO-1) + measurement_left) / BASELINE_UPDATE_RATIO;
-  baseline_right = (baseline_right * (BASELINE_UPDATE_RATIO-1) + measurement_right) / BASELINE_UPDATE_RATIO;
+  baseline_left = (baseline_left * (BASELINE_UPDATE_RATIO - 1) + measurement_left) / BASELINE_UPDATE_RATIO;
+  baseline_right = (baseline_right * (BASELINE_UPDATE_RATIO - 1) + measurement_right) / BASELINE_UPDATE_RATIO;
 
   // Use the active pin's measurement and baseline for delta calculation
   unsigned long measurement = (active_pin == LS_LEFT_PIN) ? measurement_left : measurement_right;
   long baseline = (active_pin == LS_LEFT_PIN) ? baseline_left : baseline_right;
-  
+
   // Work based on a delta to avoid ambient conditions influencing signal quality
   long delta = measurement - baseline;
 
@@ -130,53 +130,53 @@ void loop() {
   int prev_state = current_state;
 
   // Depending on what state we're in, different pulses mean different things (sync, data, etc.) so it's state machine time
-  switch (current_state){
+  switch (current_state) {
     case STATE_LISTENING:
       debug_currently_reading = 0;
       received_bits = 0;
       debug_currently_syncing = 0;
       debug_currently_checksum = 0;
 
-      if (delta > MIN_READING){
+      if (delta > MIN_READING) {
         current_state = STATE_SYNC;
         debug_currently_syncing = 1000;
         sync_pulse_start = now;
       }
       break;
     case STATE_SYNC: {
-      received_bits = 0;
-      debug_currently_reading = 0;
-      debug_currently_checksum = 0;
-    
-      // Detect falling edge
-      if (delta < 0) {
-        debug_currently_syncing = 0;
-        unsigned long pulse_duration = now - sync_pulse_start;
-        if (DEBUG_OUTPUTS) Serial.print("pulse duration for sync: ");
-        if (DEBUG_OUTPUTS) Serial.println(pulse_duration);
+        received_bits = 0;
+        debug_currently_reading = 0;
+        debug_currently_checksum = 0;
 
-        // Require between max sync pulse and min of max data length to avoid locking on incorrect signal timing
-        if (pulse_duration > LONG_PULSE_MS and pulse_duration <= SYNC_PULSE_MS + PULSE_TOLERANCE) { // add tolerance on top end because sometimes the pulse is read to be like 1ms longer
-          if (DEBUG_OUTPUTS) Serial.println("SYNC LOCKED");
-          selectBestPin();  // Select the best pin for this byte
-          current_state = STATE_MONITORING;
-          current_read = now;
-        } else {
-          if (DEBUG_REJECTION_REASON) Serial.println("REJECTED: Sync pulse incorrect timing");
-          // If pulse isn't a sync, go back to listening state for another potential sync.
-          current_state = STATE_LISTENING;
+        // Detect falling edge
+        if (delta < 0) {
+          debug_currently_syncing = 0;
+          unsigned long pulse_duration = now - sync_pulse_start;
+          if (DEBUG_OUTPUTS) Serial.print("pulse duration for sync: ");
+          if (DEBUG_OUTPUTS) Serial.println(pulse_duration);
+
+          // Require between max sync pulse and min of max data length to avoid locking on incorrect signal timing
+          if (pulse_duration > LONG_PULSE_MS and pulse_duration <= SYNC_PULSE_MS + PULSE_TOLERANCE) { // add tolerance on top end because sometimes the pulse is read to be like 1ms longer
+            if (DEBUG_OUTPUTS) Serial.println("SYNC LOCKED");
+            selectBestPin();  // Select the best pin for this byte
+            current_state = STATE_MONITORING;
+            current_read = now;
+          } else {
+            if (DEBUG_REJECTION_REASON) Serial.println("REJECTED: Sync pulse incorrect timing");
+            // If pulse isn't a sync, go back to listening state for another potential sync.
+            current_state = STATE_LISTENING;
+          }
         }
+        break;
       }
-      break;
-    }
     case STATE_MONITORING:
       debug_currently_syncing = 0;
       debug_currently_reading = 0;
       debug_currently_checksum = 0;
-      if (now > current_read + 1000){
+      if (now > current_read + 1000) {
         current_state = STATE_SYNC;
       }
-      if (delta > MIN_READING){
+      if (delta > MIN_READING) {
         current_state = STATE_RECEIVING;
         current_read = now;  // mark pulse start
         if (received_bits >= 8) {
@@ -184,80 +184,80 @@ void loop() {
         } else {
           debug_currently_reading = 1000;
         }
-        if (DEBUG_STRENGTH and debug_max_read < delta){
+        if (DEBUG_STRENGTH and debug_max_read < delta) {
           debug_max_read = delta;
         }
       }
       break;
-    case STATE_RECEIVING:{
+    case STATE_RECEIVING: {
 
-      if (delta < 0) {
-        debug_currently_reading = 0;
-        debug_currently_checksum = 0;
-        unsigned long pulseLength = now - current_read;
-        if (DEBUG_OUTPUTS) Serial.print("pulse duration for read: ");
-        if (DEBUG_OUTPUTS) Serial.println(pulseLength);
-    
-        bool bit_r = (pulseLength > SHORT_PULSE_MS + PULSE_TOLERANCE);   
-        if (pulseLength > LONG_PULSE_MS + PULSE_TOLERANCE){
-          // Reject packet, wait for next sync
-          if (DEBUG_REJECTION_REASON) Serial.println("REJECTED: data pulse was too long");
-          reset_state();
-          break;
-        }
+        if (delta < 0) {
+          debug_currently_reading = 0;
+          debug_currently_checksum = 0;
+          unsigned long pulseLength = now - current_read;
+          if (DEBUG_OUTPUTS) Serial.print("pulse duration for read: ");
+          if (DEBUG_OUTPUTS) Serial.println(pulseLength);
 
-        received_bits++;
-        
-        if (received_bits <= 8) {
-          // Pack received bit into 'data'
-          data = (data << 1) | bit_r;
-        } else {
-          // Pack received bit into checksum (bits 9 and 10)
-          received_checksum = (received_checksum << 1) | bit_r;
-        }
-    
-        if (received_bits == 10) {
-          // Validate checksum (interleaved parity)
-          byte expected_checksum = interleavedParity(data);
-          if (received_checksum != expected_checksum) {
-            if (DEBUG_REJECTION_REASON) {
-              Serial.print("REJECTED: checksum mismatch - received bits: ");
-              Serial.print(data, BIN);
-              Serial.print(", received checksum: ");
-              Serial.print(received_checksum, BIN);
-              Serial.print(" (expected ");
-              Serial.print(expected_checksum, BIN);
-              Serial.println(")");
-            }
+          bool bit_r = (pulseLength > SHORT_PULSE_MS + PULSE_TOLERANCE);
+          if (pulseLength > LONG_PULSE_MS + PULSE_TOLERANCE) {
+            // Reject packet, wait for next sync
+            if (DEBUG_REJECTION_REASON) Serial.println("REJECTED: data pulse was too long");
             reset_state();
             break;
           }
-          
-          if (!DEBUG_INPUTS){
-            Serial.print("received byte: 0x");
-            Serial.print(data, BIN);
-            Serial.print(" from ");
-            Serial.println(active_pin == LS_LEFT_PIN ? "Left" : "Right");
-            if (DEBUG_STRENGTH) {
-              Serial.print("Max signal strength: ");
-              Serial.println(debug_max_read);
-            }
-            debug_max_read = 0;
+
+          received_bits++;
+
+          if (received_bits <= 8) {
+            // Pack received bit into 'data'
+            data = (data << 1) | bit_r;
+          } else {
+            // Pack received bit into checksum (bits 9 and 10)
+            received_checksum = (received_checksum << 1) | bit_r;
           }
-          reset_state();
-        } else {
-          current_state = STATE_MONITORING;
+
+          if (received_bits == 10) {
+            // Validate checksum (interleaved parity)
+            byte expected_checksum = interleavedParity(data);
+            if (received_checksum != expected_checksum) {
+              if (DEBUG_REJECTION_REASON) {
+                Serial.print("REJECTED: checksum mismatch - received bits: ");
+                Serial.print(data, BIN);
+                Serial.print(", received checksum: ");
+                Serial.print(received_checksum, BIN);
+                Serial.print(" (expected ");
+                Serial.print(expected_checksum, BIN);
+                Serial.println(")");
+              }
+              reset_state();
+              break;
+            }
+
+            if (!DEBUG_INPUTS) {
+              Serial.print("received byte: 0x");
+              Serial.print(data, BIN);
+              Serial.print(" from ");
+              Serial.println(active_pin == LS_LEFT_PIN ? "Left" : "Right");
+              if (DEBUG_STRENGTH) {
+                Serial.print("Max signal strength: ");
+                Serial.println(debug_max_read);
+              }
+              debug_max_read = 0;
+            }
+            reset_state();
+          } else {
+            current_state = STATE_MONITORING;
+          }
         }
+        break;
       }
-      break;
-    }
   }
 
   //Debug print zone
- 
-  if (DEBUG_STATES){
-    if (prev_state != current_state){
-      switch(current_state){
+
+  if (DEBUG_STATES) {
+    if (prev_state != current_state) {
+      switch (current_state) {
         case STATE_LISTENING:
           Serial.println("in STATE_LISTENING");
           break;
@@ -273,8 +273,8 @@ void loop() {
       }
     }
   }
-  
-  if (DEBUG_INPUTS){
+
+  if (DEBUG_INPUTS) {
     Serial.print(delta);
     Serial.print(",\t");
     Serial.print(debug_currently_reading);
@@ -283,5 +283,5 @@ void loop() {
     Serial.print(",\t");
     Serial.println(debug_currently_checksum);
   }
-  
+
 }
