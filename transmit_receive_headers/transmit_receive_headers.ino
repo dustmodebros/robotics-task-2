@@ -6,8 +6,8 @@
 // DEFINE YOUR SENSOR PINS
 // ==========================
 
-#define LS_LEFT_PIN   4   // <-- change me
-#define LS_RIGHT_PIN  5   // <-- change me
+#define LS_LEFT_PIN   4   
+#define LS_RIGHT_PIN  5   
 
 // ==========================
 // CREATE RECEIVER
