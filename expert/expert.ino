@@ -1,20 +1,11 @@
-// Wire.h provides functions to use the I2C protocol.
 #include <Wire.h>
-
-// LISM3MDL provides functions to read the magnetometer
 #include <LIS3MDL.h>
 #include "Motors.h"
 #include "PID.h"
 #include "LineSensors.h"
 #include "Magnetometer.h"
-
-// Labsheet 3: Calibrate and use kinematics to allow
-//             your robot to turn and travel between
-//             locations.
 #include "Kinematics.h"
-
-// Encoders.h does not need modifying.
-#include "Encoders.h"     // For encoder counts
+#include "Encoders.h"
 
 Motors_c motors;
 
@@ -102,17 +93,20 @@ unsigned long waypoint_drift_ts = 0;
 #define WAYPOINT_DRIFT_RATE_MM_S (- 5.0f / 24.0f)
 
 // FSM
-#define STATE_SEARCH 0
-#define STATE_FOUND_CUP 1
-#define STATE_BACKING_UP 2
-#define STATE_GOTO_BEHIND_CUP 3
-#define STATE_DETOUR 4
-#define STATE_STRAIGHT_TO_BEHIND 5
-#define STATE_POINT_AT_ORIGIN 6
-#define STATE_GOTO_ORIGIN 7
-#define STATE_WAIT_FOR_RESET 8
-#define FINISHED 9
-#define DEBUG 413
+typedef enum{
+  STATE_SEARCH,
+  STATE_FOUND_CUP,
+  STATE_BACKING_UP,
+  STATE_GOTO_BEHIND_CUP,
+  STATE_DETOUR,
+  STATE_STRAIGHT_TO_BEHIND,
+  STATE_POINT_AT_ORIGIN,
+  STATE_GOTO_ORIGIN,
+  STATE_WAIT_FOR_RESET,
+  STATE_FINISHED,
+  STATE_DEBUG = 413
+} state;
+
 int current_state = 0;
 float alignment_target_x;
 float alignment_target_y; //the point behind the cup
