@@ -22,9 +22,9 @@ int debug_currently_checksum = 0;
 int debug_max_read = 0;
 
 // TRANSMIT PARAMETERS
-#define SYNC_PULSE_MS 100
-#define SHORT_PULSE_MS 30     // pulse length for 0. Don't go lower than 30, as then we run into read speed problems
-#define LONG_PULSE_MS  60     // pulse length for 1. 
+#define SYNC_PULSE_MS 160
+#define SHORT_PULSE_MS 60     // pulse length for 0. Don't go lower than 30, as then we run into read speed problems
+#define LONG_PULSE_MS  125     // pulse length for 1. 
 #define PULSE_TOLERANCE 2
 
 // READ SENSITIVITY

@@ -44,6 +44,115 @@ Right now the timings are as follows:
 | LONG_PULSE_MS        | 60 (1)                                        |
 | PULSE_TOLERANCE      | 2 (the extent that the pulse can be too long) |
 
+## SEQ-based Protocol (Transceiver)
+
+The `transmit_receive_headers/` folder contains a robust communication system with sequence numbers for duplicate detection.
+
+### Protocol Flow
+
+```
+Sender                                    Receiver
+  │                                          │
+  │── DATA (8b) + checksum (2b) + SEQ (1b) ─>│  11 bits after sync
+  │                                          │
+  │        (checksum valid?)                 │
+  │                                          │
+  │<── Block parity ACK (2 bits) ────────────│  Only if checksum valid
+  │                                          │
+  ✓ Increment SEQ                            ✓ Accept if SEQ != lastSEQ
+```
+
+### Transmission Format
+
+```
+SENDER OUTPUT (11 bits after sync):
+    ┌───────────┐ ┌──┐ ┌────┐ ┌──┐ ┌────┐ ┌──┐ ┌──┐ ┌────┐ ┌──┐ ┌────┐ ┌──┐ ┌────┐ ┌──┐
+    │   SYNC    │ │b7│ │ b6 │ │b5│ │ b4 │ │b3│ │b2│ │ b1 │ │b0│ │ c1 │ │c0│ │SEQ │ │  │
+────┘   100ms   └─┘  └─┘    └─┘  └─┘    └─┘  └─┘  └─┘    └─┘  └─┘    └─┘  └─┘    └─┘  └──
+                  │         DATA (8 bits)         │ CHECKSUM │ SEQ │
+                  │   (30ms=0, 60ms=1, +padding)  │ (2 bits) │(1b) │
+```
+
+### Sequence Number Protocol
+
+The SEQ bit provides duplicate detection:
+
+1. **Sender** starts with SEQ=0
+2. **Sender** transmits byte with current SEQ
+3. **Receiver** checks:
+   - If checksum invalid: don't send ACK (sender will timeout and retry)
+   - If checksum valid: send ACK (block parity)
+   - If SEQ == lastSEQ: it's a duplicate, ACK but don't deliver to application
+   - If SEQ != lastSEQ: new data, ACK and deliver to application
+4. **Sender** receives ACK: increment SEQ (toggle 0↔1)
+5. **Sender** timeout: retry with same SEQ
+
+This handles:
+- **Lost data**: No ACK sent, sender retries
+- **Lost ACK**: Sender retries with same SEQ, receiver detects duplicate
+- **Corruption**: Checksum fails, no ACK, sender retries
+
+### Checksums
+
+| Checksum | Bit 0 covers | Bit 1 covers | When used |
+|----------|--------------|--------------|-----------|
+| Interleaved parity | bits 0,2,4,6 | bits 1,3,5,7 | Sent with data |
+| Block parity | bits 0,1,4,5 | bits 2,3,6,7 | ACK response |
+
+### Pulse Types
+
+| Pulse | Duration | Purpose |
+|-------|----------|---------|
+| Short | 30ms | Bit value 0 |
+| Long | 60ms | Bit value 1 |
+| Sync | 100ms | Start of data transmission |
+
+### Files
+
+| File | Description |
+|------|-------------|
+| `transmit.h` | Transmitter class with `sendByte()`, `sendBits()`, SEQ tracking |
+| `receive.h` | Receiver class with 11-bit reception, duplicate detection |
+| `transceiver.h` | Coordinated transceiver handling the full protocol |
+| `transmit_receive_headers.ino` | Example usage |
+
+### Usage
+
+```cpp
+#include "transceiver.h"
+
+Transceiver transceiver;
+
+void setup() {
+  transceiver.init(100, 50, 30, 60, 10, 2, 200, 500, 75, true);
+}
+
+void loop() {
+  transceiver.check();
+  
+  // Receiving
+  if (transceiver.available()) {
+    byte b = transceiver.read();
+    // New data received (duplicates filtered out)
+  }
+  
+  // Sending
+  if (someCondition && transceiver.isReceiving()) {
+    transceiver.sendByte(0x42);
+  }
+  
+  // Check send result
+  if (transceiver.isTransactionComplete()) {
+    if (transceiver.wasSuccessful()) {
+      // ACK received, SEQ incremented
+    } else {
+      // Timeout, will retry with same SEQ
+    }
+    transceiver.clearTransaction();
+  }
+}
+```
+
 ## Notes
 Going for a smaller timescale to up the bitrate seems to run into problems where we struggle to read the pulses due to the latency on reading the IR sensor, as well as delays caused by execution on the microcontroller.
 Unfortunately this limits us to a somewhat piddly ~1.4ish Bytes/sec. Additionally, going slower seems to make the connection less fiddly and precise.
