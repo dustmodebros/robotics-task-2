@@ -1,5 +1,3 @@
-
-
 #define LS_LEFT_PIN   4  
 #define LS_RIGHT_PIN  5 
 
@@ -10,18 +8,36 @@ class Receiver {
       STATE_LISTENING,
       STATE_SYNC,
       STATE_MONITORING,
-      STATE_RECEIVING
+      STATE_RECEIVING,
+      STATE_BITS_WAITING,
+      STATE_BITS_RECEIVING
+    };
+
+    enum ReceiveMode {
+      RX_MODE_BYTE,
+      RX_MODE_BITS
     };
   
     State currentState;
+    ReceiveMode rxMode;
   
     // Data
     byte data;
     byte receivedChecksum;
+    byte receivedSeq;
     int receivedBits;
+    int expectedBits;
   
     bool byteAvailable;
     byte receivedByte;
+    bool checksumValid;
+
+    bool bitsAvailable;
+    byte receivedRawBits;
+
+    // Sequence tracking for duplicate detection
+    byte lastSeq;
+    bool lastSeqValid;  // false until first packet received
   
     // Sensor
     long baselineLeft;
@@ -50,9 +66,10 @@ class Receiver {
     int debugCurrentlyReading;
     int debugCurrentlySyncing;
     int debugCurrentlyChecksum;
+    int debugCurrentlyAckBits;
     int debugMaxRead;
-  
-    
+
+    bool isTransmitting;
   
     unsigned long measureSensor(int pin) {
       pinMode(pin, OUTPUT);
@@ -81,10 +98,19 @@ class Receiver {
       data = 0;
       receivedChecksum = 0;
       receivedBits = 0;
-      currentState = STATE_LISTENING;
+      receivedRawBits = 0;
+      // Don't reset receivedSeq or checksumValid - they need to persist until read by transceiver
+      
+      switch (rxMode) {
+        case RX_MODE_BYTE:
+          currentState = STATE_LISTENING;
+          break;
+        case RX_MODE_BITS:
+          currentState = STATE_BITS_WAITING;
+          break;
+      }
     }
   
-    // TODO Still include?
     void selectBestPin() {
       unsigned long left = measureSensor(LS_LEFT_PIN);
       unsigned long right = measureSensor(LS_RIGHT_PIN);
@@ -123,25 +149,50 @@ class Receiver {
       debugCurrentlyReading = 0;
       debugCurrentlySyncing = 0;
       debugCurrentlyChecksum = 0;
+      debugCurrentlyAckBits = 0;
       debugMaxRead = 0;
+      isTransmitting = false;
 
       byteAvailable = false;
+      bitsAvailable = false;
+      checksumValid = false;
+      receivedRawBits = 0;
+      receivedSeq = 0;
+      expectedBits = 2;
+
+      lastSeq = 0;
+      lastSeqValid = false;
+
+      rxMode = RX_MODE_BYTE;
       resetState();
 
       if (debugInputs) {
-        Serial.println("delta, read_status, sync_status, checksum_status");
+        Serial.println("delta, data, sync, checksum, ack_bits (transmitting = -1000)");
       }
+    }
+
+    void listenForBits(int numBits) {
+      rxMode = RX_MODE_BITS;
+      expectedBits = numBits;
+      bitsAvailable = false;
+      receivedRawBits = 0;
+      receivedBits = 0;
+      currentState = STATE_BITS_WAITING;
+    }
+
+    void listenForByte() {
+      rxMode = RX_MODE_BYTE;
+      byteAvailable = false;
+      resetState();
     }
   
     State check() {
   
       unsigned long now = millis();
   
-      // Measure both sensors
       unsigned long left = measureSensor(LS_LEFT_PIN);
       unsigned long right = measureSensor(LS_RIGHT_PIN);
   
-      // Slowly update baselines
       baselineLeft  = (baselineLeft * 15 + left) / 16;
       baselineRight = (baselineRight * 15 + right) / 16;
   
@@ -162,6 +213,7 @@ class Receiver {
           receivedBits = 0;
           debugCurrentlySyncing = 0;
           debugCurrentlyChecksum = 0;
+          debugCurrentlyAckBits = 0;
 
           if (delta > minReading) {
             currentState = STATE_SYNC;
@@ -174,6 +226,7 @@ class Receiver {
           receivedBits = 0;
           debugCurrentlyReading = 0;
           debugCurrentlyChecksum = 0;
+          debugCurrentlyAckBits = 0;
 
           if (delta < 0) {
             debugCurrentlySyncing = 0;
@@ -184,7 +237,7 @@ class Receiver {
               Serial.println(duration);
             }
   
-            if (duration > longPulseMs &&
+            if (duration > longPulseMs + pulseTolerance &&
                 duration <= syncPulseMs + pulseTolerance) {
               if (debugOutputs) Serial.println("SYNC LOCKED");
               selectBestPin();
@@ -201,6 +254,7 @@ class Receiver {
           debugCurrentlySyncing = 0;
           debugCurrentlyReading = 0;
           debugCurrentlyChecksum = 0;
+          debugCurrentlyAckBits = 0;
 
           if (now > currentRead + 1000) {
             currentState = STATE_SYNC;
@@ -220,6 +274,8 @@ class Receiver {
           break;
   
         case STATE_RECEIVING:
+          debugCurrentlyAckBits = 0;
+
           if (delta < 0) {
             debugCurrentlyReading = 0;
             debugCurrentlyChecksum = 0;
@@ -237,30 +293,35 @@ class Receiver {
               break;
             }
   
-            bool bitValue =
-              (pulseLen > shortPulseMs + pulseTolerance);
+            bool bitValue = (pulseLen > shortPulseMs + pulseTolerance);
   
             receivedBits++;
   
             if (receivedBits <= 8) {
+              // Data bits (bits 1-8)
               data = (data << 1) | bitValue;
+            } else if (receivedBits <= 10) {
+              // Checksum bits (bits 9-10)
+              receivedChecksum = (receivedChecksum << 1) | bitValue;
             } else {
-              receivedChecksum =
-                (receivedChecksum << 1) | bitValue;
+              // SEQ bit (bit 11)
+              receivedSeq = bitValue;
             }
   
-            if (receivedBits == 10) {
-  
+            if (receivedBits == 11) {
               byte expected = interleavedParity(data);
+              checksumValid = (receivedChecksum == expected);
   
-              if (receivedChecksum == expected) {
+              if (checksumValid) {
                 receivedByte = data;
                 byteAvailable = true;
 
                 if (!debugInputs) {
                   Serial.print("received byte: 0x");
-                  Serial.print(data, BIN);
-                  Serial.print(" from ");
+                  Serial.print(data, HEX);
+                  Serial.print(" (SEQ=");
+                  Serial.print(receivedSeq);
+                  Serial.print(") from ");
                   Serial.println(activePin == LS_LEFT_PIN ? "Left" : "Right");
                   if (debugStrength) {
                     Serial.print("Max signal strength: ");
@@ -270,11 +331,11 @@ class Receiver {
                 }
               } else {
                 if (debugRejectionReason) {
-                  Serial.print("REJECTED: checksum mismatch - received bits: ");
-                  Serial.print(data, BIN);
-                  Serial.print(", received checksum: ");
+                  Serial.print("REJECTED: checksum mismatch - data: 0x");
+                  Serial.print(data, HEX);
+                  Serial.print(", checksum: 0b");
                   Serial.print(receivedChecksum, BIN);
-                  Serial.print(" (expected ");
+                  Serial.print(" (expected 0b");
                   Serial.print(expected, BIN);
                   Serial.println(")");
                 }
@@ -283,6 +344,51 @@ class Receiver {
               resetState();
             } else {
               currentState = STATE_MONITORING;
+            }
+          }
+          break;
+
+        case STATE_BITS_WAITING:
+          debugCurrentlyAckBits = 0;
+
+          if (delta > minReading) {
+            currentState = STATE_BITS_RECEIVING;
+            currentRead = now;
+            debugCurrentlyAckBits = 1000;
+            if (debugOutputs) Serial.println("Raw bit pulse detected");
+          }
+          break;
+
+        case STATE_BITS_RECEIVING:
+          if (delta < 0) {
+            debugCurrentlyAckBits = 0;
+            unsigned long pulseLen = now - currentRead;
+
+            if (debugOutputs) {
+              Serial.print("Raw bit pulse duration: ");
+              Serial.println(pulseLen);
+            }
+
+            if (pulseLen > longPulseMs + pulseTolerance) {
+              if (debugRejectionReason) Serial.println("REJECTED: raw bit pulse too long");
+              resetState();
+              break;
+            }
+
+            bool bitValue = (pulseLen > shortPulseMs + pulseTolerance);
+            receivedBits++;
+            receivedRawBits = (receivedRawBits << 1) | bitValue;
+
+            if (receivedBits >= expectedBits) {
+              bitsAvailable = true;
+              if (debugOutputs) {
+                Serial.print("Raw bits received: 0b");
+                Serial.println(receivedRawBits, BIN);
+              }
+              currentState = STATE_BITS_WAITING;
+              receivedBits = 0;
+            } else {
+              currentState = STATE_BITS_WAITING;
             }
           }
           break;
@@ -303,6 +409,12 @@ class Receiver {
             case STATE_RECEIVING:
               Serial.println("in STATE_RECEIVING");
               break;
+            case STATE_BITS_WAITING:
+              Serial.println("in STATE_BITS_WAITING");
+              break;
+            case STATE_BITS_RECEIVING:
+              Serial.println("in STATE_BITS_RECEIVING");
+              break;
           }
         }
       }
@@ -310,11 +422,18 @@ class Receiver {
       if (debugInputs) {
         Serial.print(delta);
         Serial.print(",\t");
-        Serial.print(debugCurrentlyReading);
-        Serial.print(",\t");
-        Serial.print(debugCurrentlySyncing);
-        Serial.print(",\t");
-        Serial.println(debugCurrentlyChecksum);
+        if (isTransmitting) {
+          Serial.print("-1000,\t-1000,\t-1000,\t-1000");
+        } else {
+          Serial.print(debugCurrentlyReading);
+          Serial.print(",\t");
+          Serial.print(debugCurrentlySyncing);
+          Serial.print(",\t");
+          Serial.print(debugCurrentlyChecksum);
+          Serial.print(",\t");
+          Serial.print(debugCurrentlyAckBits);
+        }
+        Serial.println();
       }
 
       return currentState;
@@ -329,5 +448,42 @@ class Receiver {
       return receivedByte;
     }
 
+    bool bitsReady() {
+      return bitsAvailable;
+    }
 
+    byte readBits() {
+      bitsAvailable = false;
+      return receivedRawBits;
+    }
+
+    // Check if checksum was valid for last received packet
+    bool wasChecksumValid() {
+      return checksumValid;
+    }
+
+    // Get the SEQ bit from last received packet
+    byte getReceivedSeq() {
+      return receivedSeq;
+    }
+
+    // Check if this is a duplicate (same SEQ as last)
+    bool isDuplicate() {
+      if (!lastSeqValid) return false;
+      return receivedSeq == lastSeq;
+    }
+
+    // Update last SEQ after accepting a packet
+    void updateLastSeq() {
+      lastSeq = receivedSeq;
+      lastSeqValid = true;
+    }
+
+    ReceiveMode getMode() {
+      return rxMode;
+    }
+
+    void setTransmitting(bool transmitting) {
+      isTransmitting = transmitting;
+    }
   };
