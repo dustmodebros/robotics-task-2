@@ -514,35 +514,7 @@ void doDebug() {
   }
 }
 
-void loop() {
-  // if (!display.timeRemaining()) { // need to replace with internal timer.
-  //   display.showDone();
-  //   current_state = FINISHED;
-  // }
-
-  // Wait for demand to be enabled after initialisation delay
-  if (!enable_demand && millis() > enable_demand_ts + enable_demand_ms) {
-    enable_demand = true;
-    left_pid.reset();
-    right_pid.reset();
-    heading.reset();
-  }
-  checkMoving();
-  computeSpeed(); // update global variables with new speed estimates
-  if (enable_demand) {
-    obeyDemand(); // Set motor PWM according to demand
-  }
-  updatePose(); // update kinematics
-  calcCalibratedMag(max_mag_readings, min_mag_readings);
-  // Drift waypoints' and origin's y coordinates by -5/24 mm every second
-  if (millis() - waypoint_drift_ts >= 1000) {
-    waypoint_drift_ts = millis();
-    for (int i = 0; i < NUM_WAYPOINTS; i++) {
-      waypoints_y[i] -= WAYPOINT_DRIFT_RATE_MM_S;
-    }
-    origin_y -= WAYPOINT_DRIFT_RATE_MM_S;
-  }
-
+void checkState() {
   switch (current_state){
     case SEARCH:
       doSearch();
@@ -579,4 +551,36 @@ void loop() {
       doDebug();
       break;
   }
+}
+
+void loop() {
+  // if (!display.timeRemaining()) { // need to replace with internal timer.
+  //   display.showDone();
+  //   current_state = FINISHED;
+  // }
+
+  // Wait for demand to be enabled after initialisation delay
+  if (!enable_demand && millis() > enable_demand_ts + enable_demand_ms) {
+    enable_demand = true;
+    left_pid.reset();
+    right_pid.reset();
+    heading.reset();
+  }
+  checkMoving();
+  computeSpeed(); // update global variables with new speed estimates
+  if (enable_demand) {
+    obeyDemand(); // Set motor PWM according to demand
+  }
+  updatePose(); // update kinematics
+  calcCalibratedMag(max_mag_readings, min_mag_readings);
+  // Drift waypoints' and origin's y coordinates by -5/24 mm every second
+  if (millis() - waypoint_drift_ts >= 1000) {
+    waypoint_drift_ts = millis();
+    for (int i = 0; i < NUM_WAYPOINTS; i++) {
+      waypoints_y[i] -= WAYPOINT_DRIFT_RATE_MM_S;
+    }
+    origin_y -= WAYPOINT_DRIFT_RATE_MM_S;
+  }
+
+  checkState();
 }
