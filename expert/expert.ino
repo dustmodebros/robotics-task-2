@@ -161,30 +161,24 @@ bool checkMovingDemand() {
 }
 
 void computeSpeed() {
-  unsigned long elapsed_time = millis() - speed_est_ts;
-  if ( elapsed_time > SPEED_EST_MS) {
-    speed_est_ts = millis();
-
-    // Work out the difference in encoder counts
-    long count_difference_right = count_e0 - last_e0;
-    long count_difference_left = count_e1 - last_e1;
-
-    // Save the current count as the last count
-    last_e0 = count_e0;
-    last_e1 = count_e1;
-
-    // turn counts into speed by dividing by timestep
-    speed_left = count_difference_left / float(SPEED_EST_MS);
-    speed_right = count_difference_right / float(SPEED_EST_MS);
-
-    // compute smoothed speed
-    smoothed_speed_left = (SMOOTHING_FACTOR * speed_left) + ((1 - SMOOTHING_FACTOR) * last_smoothed_speed_left);
-    smoothed_speed_right = (SMOOTHING_FACTOR * speed_right) + ((1 - SMOOTHING_FACTOR) * last_smoothed_speed_right);
-
-    // set current smoothed speed as previous for next loop
-    last_smoothed_speed_left = smoothed_speed_left;
-    last_smoothed_speed_right = smoothed_speed_right;
-  }
+  const unsigned long elapsed_time = millis() - speed_est_ts;
+  if (elapsed_time <= SPEED_EST_MS) {return;}
+  speed_est_ts = millis();
+  // Work out the difference in encoder counts
+  const long count_difference_right = count_e0 - last_e0;
+  const long count_difference_left = count_e1 - last_e1;
+  // Save the current count as the last count
+  last_e0 = count_e0;
+  last_e1 = count_e1;
+  // turn counts into speed by dividing by timestep
+  speed_left = count_difference_left / float(SPEED_EST_MS);
+  speed_right = count_difference_right / float(SPEED_EST_MS);
+  // compute smoothed speed
+  smoothed_speed_left = (SMOOTHING_FACTOR * speed_left) + ((1 - SMOOTHING_FACTOR) * last_smoothed_speed_left);
+  smoothed_speed_right = (SMOOTHING_FACTOR * speed_right) + ((1 - SMOOTHING_FACTOR) * last_smoothed_speed_right);
+  // set current smoothed speed as previous for next loop
+  last_smoothed_speed_left = smoothed_speed_left;
+  last_smoothed_speed_right = smoothed_speed_right;
 }
 
 
@@ -197,13 +191,12 @@ void calcCalibratedMag(float min_values[3], float max_values[3]) {
 }
 
 void obeyDemand() {
-  unsigned long now = millis();
-  if (now - pid_update_ts > PID_UPDATE_MS) {
-    pid_update_ts = now;
-    float l_pwm = left_pid.update(left_demand, smoothed_speed_left);
-    float r_pwm = right_pid.update(right_demand, smoothed_speed_right);
-    motors.setPWM(l_pwm, r_pwm);
-  }
+  const unsigned long now = millis();
+  if (now - pid_update_ts <= PID_UPDATE_MS) {return;}
+  pid_update_ts = now;
+  const float l_pwm = left_pid.update(left_demand, smoothed_speed_left);
+  const float r_pwm = right_pid.update(right_demand, smoothed_speed_right);
+  motors.setPWM(l_pwm, r_pwm);
 }
 
 float convertToMagnitude() {
@@ -224,24 +217,25 @@ float sign(float x) {
 }
 
 // stop_distance_mm: when > 0, stop when within this many mm of target. When <= 0, use POSITION_TOLERANCE.
+// returns affirmative if we've reached our destination
 bool checkTravel(float stop_distance_mm = -1) {
-  unsigned long now = millis();
+  const unsigned long now = millis();
   if (now < travel_ts + travel_ms) {
     return false;  // Rate limit: don't update demands yet
   }
   travel_ts = now;
 
-  float dist_sq = pow(pose.x - target_x, 2) + pow(pose.y - target_y, 2); // distance to the stopping point
-  float threshold_sq = (stop_distance_mm > 0) ? (stop_distance_mm * stop_distance_mm) : POSITION_TOLERANCE;
+  const float dist_sq = pow(pose.x - target_x, 2) + pow(pose.y - target_y, 2); // distance to the stopping point
+  const float threshold_sq = (stop_distance_mm > 0) ? (stop_distance_mm * stop_distance_mm) : POSITION_TOLERANCE;
   if (dist_sq > threshold_sq) {
-    float theta_d = atan2(target_y-pose.y, target_x-pose.x); // desired angle
-    float diff = smallestAngle(pose.theta, theta_d);
-    float turn_scaling_factor = 0.5;
+    const float theta_d = atan2(target_y-pose.y, target_x-pose.x); // desired angle
+    const float diff = smallestAngle(pose.theta, theta_d);
+    const float turn_scaling_factor = 0.5;
 
     if (abs(diff) > TURN_IN_PLACE_THRESHOLD) {
       // Large angle error: turn in place with opposite wheel demands for precise turning.
       // Limit wheel speed to prevent skidding.
-      float turn_speed = MAX_TURN_PWM * sign(diff);
+      const float turn_speed = MAX_TURN_PWM * sign(diff);
       left_demand = -turn_speed;
       right_demand = turn_speed;
     } else {
@@ -260,12 +254,11 @@ bool checkTravel(float stop_distance_mm = -1) {
   }
 }
 
-
 void calibrateSensors() {
-  unsigned long start_time = millis();
-  unsigned long duration = 2400;
+  const unsigned long start_time = millis();
+  const unsigned long duration = 2400;
 
-  while ( millis() - start_time < duration) {
+  while (millis() - start_time < duration) {
     setTurn(0.175, 1, 100); // rotate clockwise for 100 milliseconds
 
     // Line sensor calibration
@@ -299,8 +292,8 @@ float smallestAngle(float theta_i, float desired_angle) {
 bool checkTurn() {
   // Have we finished the turn? If not:
   float angle_diff = smallestAngle(pose.theta, target_angle);
-  float turn_gain = 1;
-  if( abs(angle_diff) > TURNING_SENSITIVITY) {
+  const float turn_gain = 1;
+  if(abs(angle_diff) > TURNING_SENSITIVITY) {
     if (millis() > travel_ts + travel_ms){
       angle_diff = angle_diff * turn_gain;
   
@@ -324,17 +317,13 @@ bool checkTurn() {
       // Signal that the turn is still in progress
       // by returning "false"
       return false;
-
   } else {
-
     // Turn finished, stop the robot.
     motors.setPWM(0, 0);
     enable_demand = true;
-
     // Signal that the turn finished by
     // returning "true".
     return true;
-
   }
 }
 
