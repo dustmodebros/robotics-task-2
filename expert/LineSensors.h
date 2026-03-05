@@ -38,8 +38,8 @@ class LineSensors_c {
     // Variables to store calibration constants. 
     // Make use of these as a part of the exercises 
     // in labsheet 2.
-    float minimum[ NUM_SENSORS ];
-    float maximum[ NUM_SENSORS ];
+    float minimum[ NUM_SENSORS ] = {1024.0, 1024.0, 1024.0, 1024.0, 1024.0};
+    float maximum[ NUM_SENSORS ] = {0.0, 0.0, 0.0, 0.0, 0.0};
     float scaling[ NUM_SENSORS ];
 
     // Variable to store the calculated calibrated
@@ -135,6 +135,15 @@ class LineSensors_c {
     void readSensorsDigital() {
     //  ???
     } // End of readSensorsDigital()
+
+    void calibrate() {
+      readSensorsADC();
+      for (int i = 0; i < 5; i++) {
+        maximum[i] = max(line_sensors.readings[i], maximum[i]);
+        minimum[i] = min(line_sensors.readings[i], minimum[i]);
+      }
+      //unfinished IR sensor implementation.
+    }
 
 }; // End of LineSensor_c class defintion
 

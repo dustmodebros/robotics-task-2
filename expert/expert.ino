@@ -51,10 +51,6 @@ float right_demand; // requested wheel speed
 unsigned long pid_update_ts;  // timestamp for updating PID values
 #define PID_UPDATE_MS 50     // periodicity of PID update
 
-// IR SENSOR TUNING
-float max_ir_readings[] = {0.0, 0.0, 0.0, 0.0, 0.0};
-float min_ir_readings[] = {1024.0, 1024.0, 1024.0, 1024.0, 1024.0};
-
 // MAGNET CALIBRATION
 float max_mag_readings[] = { -9999.0, -9999.0, -9999.0};
 float min_mag_readings[] = {9999.0, 9999.0, 9999.0};
@@ -245,11 +241,7 @@ void calibrateSensors() {
     setTurn(0.175, 1, 100); // rotate clockwise for 100 milliseconds
 
     // Line sensor calibration
-    line_sensors.readSensorsADC();
-    for (int i = 0; i < 5; i++) {
-      max_ir_readings[i] = max(line_sensors.readings[i], max_ir_readings[i]);
-      min_ir_readings[i] = min(line_sensors.readings[i], min_ir_readings[i]);
-    }
+    line_sensors.calibrate();
 
     // Magnetometer calibration
     mag.read();
