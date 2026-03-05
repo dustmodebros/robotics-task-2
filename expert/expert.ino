@@ -10,7 +10,6 @@
 Motors_c motors;
 LineSensors_c line_sensors;
 Magnetometer_c magnetometer;
-LIS3MDL mag;
 Kinematics_c pose;
 
 // --- GLOBAL VARIABLES ---
@@ -50,11 +49,6 @@ float left_demand; // requested wheel speed
 float right_demand; // requested wheel speed
 unsigned long pid_update_ts;  // timestamp for updating PID values
 #define PID_UPDATE_MS 50     // periodicity of PID update
-
-// MAGNET CALIBRATION
-float max_mag_readings[] = { -9999.0, -9999.0, -9999.0};
-float min_mag_readings[] = {9999.0, 9999.0, 9999.0};
-float calibrated_mag[3];
 
 // DEBUG PRINTS
 unsigned long debug_ts = millis();
@@ -160,15 +154,6 @@ void computeSpeed() {
   last_smoothed_speed_right = smoothed_speed_right;
 }
 
-
-void calcCalibratedMag(float min_values[3], float max_values[3]) {
-  mag.read();
-  float readings[3] = {(float)mag.m.x, (float)mag.m.y, (float)mag.m.z};
-  for (int i = 0; i < 3; i++) {
-    calibrated_mag[i] = 2.0f * (readings[i] - min_values[i]) / (max_values[i] - min_values[i]) - 1.0f;
-  }
-}
-
 void obeyDemand() {
   const unsigned long now = millis();
   if (now - pid_update_ts <= PID_UPDATE_MS) {return;}
@@ -176,14 +161,6 @@ void obeyDemand() {
   const float l_pwm = left_pid.update(left_demand, smoothed_speed_left);
   const float r_pwm = right_pid.update(right_demand, smoothed_speed_right);
   motors.setPWM(l_pwm, r_pwm);
-}
-
-float convertToMagnitude() {
-  float sum = 0;
-  for (int i = 0; i < 3; i++) {
-    sum += calibrated_mag[i] * calibrated_mag[i];
-  }
-  return sqrt(sum);
 }
 
 void setTravel(float x, float y) {
@@ -244,12 +221,7 @@ void calibrateSensors() {
     line_sensors.calibrate();
 
     // Magnetometer calibration
-    mag.read();
-    float readings[3] = {(float)mag.m.x, (float)mag.m.y, (float)mag.m.z};
-    for (int i = 0; i < 3; i++) {
-      max_mag_readings[i] = max(readings[i], max_mag_readings[i]);
-      min_mag_readings[i] = min(readings[i], min_mag_readings[i]);
-    }
+    magnetometer.calibrate();
     delay(100);
   }
 }
@@ -342,13 +314,7 @@ void setup() {
 
   // If you have a problem with your magnetometer, your code
   // will get stuck here and print the below message.
-  if (!mag.init() ) {
-    while (1) {
-      Serial.println("Failed to detect and initialize magnetometer!");
-      delay(1000);
-    }
-  }
-  mag.enableDefault();
+  magnetometer.initialise();
 
   left_pid.initialise(0.3, 0.001, 0.0); // tuned values
   right_pid.initialise(0.31, 0.001, 0.0);
@@ -370,7 +336,7 @@ void doSearch() {
     current_waypoint += 1;
       setTravel(waypoints_x[current_waypoint % 7], waypoints_y[current_waypoint % 7]);
     }
-  if (convertToMagnitude() > 2.7){
+  if (magnetometer.convertToMagnitude() > 2.7){
     current_state = FOUND_CUP;
     enable_demand_ts = millis() - enable_demand_ms + 500;
     enable_demand = false;
@@ -564,6 +530,6 @@ void loop() {
   }
   updatePose(); // update kinematics
   driftWaypoints();
-  calcCalibratedMag(max_mag_readings, min_mag_readings);
+  magnetometer.doCalibratedReadings();
   checkState();
 }
