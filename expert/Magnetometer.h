@@ -25,14 +25,16 @@ class Magnetometer_c {
     float readings[MAX_AXIS];
     unsigned long mag_ts;
 
-    void getReadings() {
+    // returns affirmative if new measurements were taken
+    bool getReadings() {
       // ensure the magnetometer is not engaged too frequently
-      if (millis() < mag_ts + 100) {return;}
+      if (millis() < mag_ts + 100) {return false;}
       mag.read();
       readings[0] = mag.m.x;
       readings[1] = mag.m.y;
       readings[2] = mag.m.z;
       mag_ts = millis();
+      return true;
     } // End of getReadings()
 
   public:
@@ -60,7 +62,7 @@ class Magnetometer_c {
     }
 
     void calibrate() {
-      getReadings();
+      if (!getReadings()) {return;}
       for (int i = 0; i < MAX_AXIS; i++) {
         maximum[i] = max(readings[i], maximum[i]);
         minimum[i] = min(readings[i], minimum[i]);
@@ -68,7 +70,7 @@ class Magnetometer_c {
     }
 
     void doCalibratedReadings() {
-      getReadings();
+      if (!getReadings()) {return;}
       for (int i = 0; i < MAX_AXIS; i++) {
         readings[i] = 2.0f * (readings[i] - minimum[i]) / (maximum[i] - minimum[i]) - 1.0f;
       }
