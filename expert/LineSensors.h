@@ -83,8 +83,8 @@ class LineSensors_c {
     void calibrate() {
       readSensorsADC();
       for (int i = 0; i < 5; i++) {
-        maximum[i] = max(line_sensors.readings[i], maximum[i]);
-        minimum[i] = min(line_sensors.readings[i], minimum[i]);
+        maximum[i] = max(readings[i], maximum[i]);
+        minimum[i] = min(readings[i], minimum[i]);
       }
     }
 
