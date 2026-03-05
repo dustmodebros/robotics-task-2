@@ -7,6 +7,8 @@
 #include "Kinematics.h"
 #include "Encoders.h"
 
+#include "Movement.h"
+
 Motors_c motors;
 LineSensors_c line_sensors;
 Magnetometer_c magnetometer;
@@ -126,29 +128,12 @@ void computeTurnBias(float fwd_bias_pwm, float turn_pwm, float& left_bias, float
   left_bias = fwd_bias_pwm - 2 * remove_from_left;
 }
 
-void setTurnDemand(float fwd_bias_pwm, float turn_pwm, unsigned long duration_ms) {
-  float left_bias, right_bias;
-  computeTurnBias(fwd_bias_pwm, turn_pwm, left_bias, right_bias);
-  stop_moving_at_demand = millis() + duration_ms;
-  left_demand = left_bias;
-  right_demand = right_bias;
-  is_stopped_demand = false;
-}
-
 void setTurn(float fwd_bias_pwm, float turn_pwm, unsigned long duration_ms) {
   float left_bias, right_bias;
   computeTurnBias(fwd_bias_pwm, turn_pwm, left_bias, right_bias);
   stop_moving_at = millis() + duration_ms;
   motors.setPWM(left_bias, right_bias);
   is_stopped = false;
-}
-
-bool checkMoving() {
-  if (!is_stopped && millis() > stop_moving_at) {
-    motors.setPWM(0, 0);
-    is_stopped = true;
-  }
-  return is_stopped;
 }
 
 bool checkMovingDemand() {
@@ -406,6 +391,14 @@ void doSearch() {
 void doFoundCup() {
   setTurn(-0.2,0,400);
   current_state = BACKING_UP;
+}
+
+bool checkMoving() {
+  if (!is_stopped && millis() > stop_moving_at) {
+    motors.setPWM(0, 0);
+    is_stopped = true;
+  }
+  return is_stopped;
 }
 
 void doBackingUp() {
