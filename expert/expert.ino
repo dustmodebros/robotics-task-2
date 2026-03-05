@@ -90,6 +90,9 @@ float origin_y = 0;  // Drifted with waypoints
 unsigned long waypoint_drift_ts = 0;
 #define WAYPOINT_DRIFT_RATE_MM_S (- 5.0f / 24.0f)
 
+// STOP TIMER
+unsigned long stop_ts;
+
 // FSM
 typedef enum{
   SEARCH,
@@ -283,7 +286,6 @@ void calibrateSensors() {
   }
 }
 
-
 float smallestAngle(float theta_i, float desired_angle) {
   float diff = desired_angle - theta_i;
   while (diff > PI) diff -= 2.0f * PI;
@@ -394,6 +396,8 @@ void setup() {
   right_pid.reset();
 
   calibrateSensors();
+
+  stop_ts = millis() + 240000; // stop after four minutes
 }
 
 
@@ -525,10 +529,9 @@ void checkState() {
     case BACKING_UP:
       doBackingUp();
       break;
-    case GOTO_BEHIND_CUP: {
+    case GOTO_BEHIND_CUP:
       doGotoBehindCup();
       break;
-    }
     case DETOUR:
       doDetour();
       break;
@@ -553,12 +556,12 @@ void checkState() {
   }
 }
 
-void loop() {
-  // if (!display.timeRemaining()) { // need to replace with internal timer.
-  //   display.showDone();
-  //   current_state = FINISHED;
-  // }
+void checkStop() {
+  if (millis() < stop_ts) {return;}
+  current_state = FINISHED;
+}
 
+void checkEnableDemand() {
   // Wait for demand to be enabled after initialisation delay
   if (!enable_demand && millis() > enable_demand_ts + enable_demand_ms) {
     enable_demand = true;
@@ -566,13 +569,9 @@ void loop() {
     right_pid.reset();
     heading.reset();
   }
-  checkMoving();
-  computeSpeed(); // update global variables with new speed estimates
-  if (enable_demand) {
-    obeyDemand(); // Set motor PWM according to demand
-  }
-  updatePose(); // update kinematics
-  calcCalibratedMag(max_mag_readings, min_mag_readings);
+}
+
+void driftWaypoints() {
   // Drift waypoints' and origin's y coordinates by -5/24 mm every second
   if (millis() - waypoint_drift_ts >= 1000) {
     waypoint_drift_ts = millis();
@@ -581,6 +580,18 @@ void loop() {
     }
     origin_y -= WAYPOINT_DRIFT_RATE_MM_S;
   }
+}
 
+void loop() {
+  checkStop();
+  checkEnableDemand();  
+  checkMoving();
+  computeSpeed(); // update global variables with new speed estimates
+  if (enable_demand) {
+    obeyDemand(); // Set motor PWM according to demand
+  }
+  updatePose(); // update kinematics
+  driftWaypoints();
+  calcCalibratedMag(max_mag_readings, min_mag_readings);
   checkState();
 }
