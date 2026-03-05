@@ -50,8 +50,8 @@ class Transceiver {
 
   public:
 
-    void init(int syncMs, int postSyncMs, int shortMs, int longMs,
-              int interBitMs, int tolerance, int minRead,
+    void init(int syncMs, int postSyncMs, int shortMs, int longMs, // I know, ew. a lot of these can/will be removed 
+              int interBitMs, int tolerance, int minRead,          // and replaced with constants when doing final reliability tuning.
               unsigned long ackTimeout = 500,
               unsigned long preAckDelay = 75,
               unsigned long interPacketDelay = 50,
@@ -81,7 +81,7 @@ class Transceiver {
       pendingAck = 0;
     }
 
-    void check() {
+    void check() { // run the state machine
       unsigned long now = millis();
 
       switch (currentMode) {
@@ -135,7 +135,7 @@ class Transceiver {
           }
           break;
 
-        case MODE_RESP_SENDING_ACK:
+        case MODE_RESP_SENDING_ACK: {
           transmitter.check();
 
           if (sendStarted && !transmitter.isSending()) {
@@ -163,6 +163,7 @@ class Transceiver {
             }
           }
           break;
+        }
 
         // ========== INITIATOR STATES ==========
 
@@ -183,7 +184,7 @@ class Transceiver {
           }
           break;
 
-        case MODE_INIT_WAITING_ACK:
+        case MODE_INIT_WAITING_ACK: {
           receiver.check();
 
           if (receiver.bitsReady()) {
@@ -214,8 +215,9 @@ class Transceiver {
             }
           }
           break;
+        }
 
-        case MODE_INIT_INTER_PACKET_DELAY:
+        case MODE_INIT_INTER_PACKET_DELAY: {
           if (now - waitStartTime >= interPacketDelayMs) {
             receiver.listenForByte();
             currentMode = MODE_RESP_RECEIVING;
@@ -225,7 +227,7 @@ class Transceiver {
             }
           }
           break;
-
+        }
         case MODE_IDLE:
           break;
       }
@@ -251,6 +253,8 @@ class Transceiver {
       }
     }
 
+    // ========= Buncha Getters ===========
+    
     bool available() {
       return hasNewByte;
     }
