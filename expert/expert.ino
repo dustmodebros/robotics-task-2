@@ -344,9 +344,7 @@ void updatePose(){
   }
 }
 
-
 void setup() {
-
   pinMode( BUZZER_PIN, OUTPUT );
   Wire.begin();
   motors.initialise(); // begin motor control
@@ -398,6 +396,124 @@ void setup() {
   calibrateSensors();
 }
 
+
+void doSearch() {
+  if (checkTravel()){
+    current_waypoint += 1;
+      setTravel(waypoints_x[current_waypoint % 7], waypoints_y[current_waypoint % 7]);
+    }
+  if (convertToMagnitude() > 2.7){
+    current_state = FOUND_CUP;
+    enable_demand_ts = millis() - enable_demand_ms + 500;
+    enable_demand = false;
+    motors.setPWM(0,0);
+  }
+}
+
+void doFoundCup() {
+  setTurn(-0.2,0,400);
+  current_state = BACKING_UP;
+}
+
+void doBackingUp() {
+  if (checkMoving()){
+    current_state = GOTO_BEHIND_CUP;
+  }
+}
+
+void doGotoBehindCup() {
+  float cup_location_x = waypoints_x[current_waypoint % 7];
+  float cup_location_y = waypoints_y[current_waypoint % 7];
+  float cup_theta = atan2(cup_location_y,cup_location_x);
+  alignment_target_x = cup_location_x + cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
+  alignment_target_y = cup_location_y + sin(cup_theta) * CUP_AVOIDANCE_AMOUNT;
+  float potential_x_1 = cup_location_x - sin(cup_theta) * CUP_AVOIDANCE_AMOUNT;
+  float potential_x_2 = cup_location_x + sin(cup_theta) * CUP_AVOIDANCE_AMOUNT;
+  float potential_y_1 = cup_location_y + cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
+  float potential_y_2 = cup_location_y - cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
+
+  // pathway waypoint will be whichever of the potentials is closest to the current pose x and y
+  float distance_target = sqrt(pow(alignment_target_x - pose.x, 2) + pow(alignment_target_y - pose.y, 2));
+  float distance_potential_1 = sqrt(pow(potential_x_1 - pose.x, 2) + pow(potential_y_1 - pose.y, 2));
+  float distance_potential_2 = sqrt(pow(potential_x_2 - pose.x, 2) + pow(potential_y_2 - pose.y, 2));
+  if (distance_target < distance_potential_1 and distance_target < distance_potential_2){
+//        Serial.println("Going straight to the alignment point");
+    current_state = STRAIGHT_TO_BEHIND;
+  } else {
+    if (distance_potential_1 < distance_potential_2){
+//    Serial.println("Going through alignment point 1");
+      pathway_x = potential_x_1;
+      pathway_y = potential_y_1;
+     } else {
+//      Serial.println("Going through alignment point 2");
+        pathway_x = potential_x_2;
+        pathway_y = potential_y_2;
+      }
+    current_state = DETOUR;
+  }
+}
+
+void doDetour() {
+  setTravel(pathway_x, pathway_y);
+  if(checkTravel()){
+    current_state = STRAIGHT_TO_BEHIND;
+  }
+}
+
+void doStraightToBehind() {
+  setTravel(alignment_target_x, alignment_target_y);
+  if(checkTravel()){
+    current_state = POINT_AT_ORIGIN;
+  }
+}
+
+void doPointAtOrigin() {
+  target_angle = atan2(-pose.x, -pose.y);
+  if(checkTurn()){
+    current_state = GOTO_ORIGIN;
+  }
+}
+
+void doGotoOrigin() {
+  setTravel(0, origin_y);
+  if (checkTravel(90)) {  // Stop when within 90mm of origin to avoid pushing cup out of end zone
+    now = millis();
+    current_state = WAIT_FOR_RESET;
+  }
+}
+
+void doWaitForReset() {
+  if (now + 4000 < millis()){
+    current_state = SEARCH;
+    current_waypoint = 0;
+  }
+}
+
+void doFinished() {
+  analogWrite(6, HIGH);
+  while(1){
+    left_demand = 0;
+    right_demand = 0;
+    motors.setPWM(0,0);
+    delay(100);
+  }
+}
+
+void doDebug() {
+  if (millis() > debug_ts + debug_ms){
+    debug_ts = millis();
+    Serial.print(pose.x);
+    Serial.print(", ");
+    Serial.print(pose.y);
+    Serial.print(", ");
+    Serial.print(pose.theta);
+    Serial.print(",           ");
+    Serial.print(target_x);
+    Serial.print(",");
+    Serial.println(target_y);
+  }
+}
+
 void loop() {
   // if (!display.timeRemaining()) { // need to replace with internal timer.
   //   display.showDone();
@@ -429,121 +545,38 @@ void loop() {
 
   switch (current_state){
     case SEARCH:
-//      Serial.println("in STATE_SEARCH");
-      //search behaviour
-      
-      if (checkTravel()){
-        current_waypoint += 1;
-        setTravel(waypoints_x[current_waypoint % 7], waypoints_y[current_waypoint % 7]);
-      }
-      if (convertToMagnitude() > 2.7){
-        current_state = FOUND_CUP;
-        enable_demand_ts = millis() - enable_demand_ms + 500;
-        enable_demand = false;
-        motors.setPWM(0,0);
-      }
+      doSearch();
       break;
     case FOUND_CUP:
-//      Serial.println("in STATE_FOUND_CUP");
-      
-      setTurn(-0.2,0,400);
-      current_state = BACKING_UP;
-      
-      //do alignment
+      doFoundCup();
       break;
     case BACKING_UP:
-//      Serial.println("in STATE_BACKING_UP");
-      if (checkMoving()){
-        current_state = GOTO_BEHIND_CUP;
-      }
+      doBackingUp();
       break;
     case GOTO_BEHIND_CUP: {
-//      Serial.println("in STATE_GOTO_BEHIND_CUP");
-      float cup_location_x = waypoints_x[current_waypoint % 7];
-      float cup_location_y = waypoints_y[current_waypoint % 7];
-      float cup_theta = atan2(cup_location_y,cup_location_x);
-      alignment_target_x = cup_location_x + cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
-      alignment_target_y = cup_location_y + sin(cup_theta) * CUP_AVOIDANCE_AMOUNT;
-      float potential_x_1 = cup_location_x - sin(cup_theta) * CUP_AVOIDANCE_AMOUNT;
-      float potential_x_2 = cup_location_x + sin(cup_theta) * CUP_AVOIDANCE_AMOUNT;
-      float potential_y_1 = cup_location_y + cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
-      float potential_y_2 = cup_location_y - cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
-
-      // pathway waypoint will be whichever of the potentials is closest to the current pose x and y
-      float distance_target = sqrt(pow(alignment_target_x - pose.x, 2) + pow(alignment_target_y - pose.y, 2));
-      float distance_potential_1 = sqrt(pow(potential_x_1 - pose.x, 2) + pow(potential_y_1 - pose.y, 2));
-      float distance_potential_2 = sqrt(pow(potential_x_2 - pose.x, 2) + pow(potential_y_2 - pose.y, 2));
-      if (distance_target < distance_potential_1 and distance_target < distance_potential_2){
-//        Serial.println("Going straight to the alignment point");
-        current_state = STRAIGHT_TO_BEHIND;
-      } else {
-        if (distance_potential_1 < distance_potential_2){
-//          Serial.println("Going through alignment point 1");
-          pathway_x = potential_x_1;
-          pathway_y = potential_y_1;
-        } else {
-//          Serial.println("Going through alignment point 2");
-          pathway_x = potential_x_2;
-          pathway_y = potential_y_2;
-        }
-        current_state = DETOUR;
-      }
+      doGotoBehindCup();
       break;
     }
     case DETOUR:
-      setTravel(pathway_x, pathway_y);
-      if(checkTravel()){
-        current_state = STRAIGHT_TO_BEHIND;
-      }
+      doDetour();
       break;
     case STRAIGHT_TO_BEHIND:
-      setTravel(alignment_target_x, alignment_target_y);
-      if(checkTravel()){
-        current_state = POINT_AT_ORIGIN;
-      }
+      doStraightToBehind();
       break;
     case POINT_AT_ORIGIN:
-      target_angle = atan2(-pose.x, -pose.y);
-      if(checkTurn()){
-        current_state = GOTO_ORIGIN;
-      }
+      doPointAtOrigin();
       break;
     case GOTO_ORIGIN:
-      setTravel(0, origin_y);
-      if (checkTravel(90)) {  // Stop when within 90mm of origin to avoid pushing cup out of end zone
-        now = millis();
-        current_state = WAIT_FOR_RESET;
-      }
+      doGotoOrigin();
       break;
     case WAIT_FOR_RESET:
-      if (now + 4000 < millis()){
-        current_state = SEARCH;
-        current_waypoint = 0;
-      }
+      doWaitForReset();
       break;
     case FINISHED:
-      analogWrite(6, HIGH);
-      while(1){
-        left_demand = 0;
-        right_demand = 0;
-        motors.setPWM(0,0);
-        delay(100);
-      }
+      doFinished();
+      break;
     case DEBUG:
-      if (millis() > debug_ts + debug_ms){
-        debug_ts = millis();
-        Serial.print(pose.x);
-        Serial.print(", ");
-        Serial.print(pose.y);
-        Serial.print(", ");
-        Serial.print(pose.theta);
-        Serial.print(",           ");
-        Serial.print(target_x);
-        Serial.print(",");
-        Serial.println(target_y);
-      }
+      doDebug();
       break;
   }
-
-
 }
