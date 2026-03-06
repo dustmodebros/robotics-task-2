@@ -22,6 +22,9 @@ volatile byte state_e0; // used to determine quadrature state
 volatile long count_e1;
 volatile byte state_e1;
 
+void setupEncoder0();
+void setupEncoder1();
+
 class Speed {
   private:
     unsigned long speed_est_ts;   // timestamp for speed estimation
