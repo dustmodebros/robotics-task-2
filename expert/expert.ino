@@ -360,7 +360,7 @@ void loop() {
   speed.computeSpeed(); // update global variables with new speed estimates
   checkDemand();
   pose.checkUpdate(); // update kinematics
-  waypoints.doDrift();
   magnetometer.doCalibratedReadings();
+  waypoints.doDrift();
   checkState();
 }
