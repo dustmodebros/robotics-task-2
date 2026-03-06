@@ -29,6 +29,17 @@ unsigned long stop_moving_at_demand;
 // PID TUNING
 PID_c left_pid;
 PID_c right_pid;
+const extern float left_p;
+const extern float left_i;
+const extern float left_d;
+const extern float right_p;
+const extern float right_i;
+const extern float right_d;
+const extern float header_p;
+const extern float header_i;
+const extern float header_d;
+
+
 float left_demand; // requested wheel speed
 float right_demand; // requested wheel speed
 unsigned long pid_update_ts;  // timestamp for updating PID values
