@@ -16,8 +16,7 @@
 
 // Class to contain generic PID algorithm.
 class PID_c {
-  public:
-
+  private:
     // PID update variables.
     float last_error;
     float p_term;
@@ -33,7 +32,8 @@ class PID_c {
 
     // To determine time elapsed.
     unsigned long ms_last_t;
-  
+
+  public:
     // Constructor, must exist.
     PID_c() {
       // leaving this empty.
