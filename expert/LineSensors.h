@@ -30,7 +30,6 @@ class LineSensors_c {
     float readings[ NUM_SENSORS ];
     float minimum[ NUM_SENSORS ] = {1024.0, 1024.0, 1024.0, 1024.0, 1024.0};
     float maximum[ NUM_SENSORS ] = {0.0, 0.0, 0.0, 0.0, 0.0};
-    float scaling[ NUM_SENSORS ];
 
     float calibrated[ NUM_SENSORS ];
     bool onLine[ NUM_SENSORS];
