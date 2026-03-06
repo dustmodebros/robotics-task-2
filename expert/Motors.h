@@ -25,13 +25,6 @@
 class Motors_c {
   private:
     bool is_stopped;
-    unsigned long stop_moving_at;
-    unsigned long stop_moving_at_demand;
-    bool is_stopped_demand;
-    bool enable_demand;
-
-    unsigned long enable_demand_ts;
-    unsigned long enable_demand_ms; // wait 5s before enabling demand
 
   public:
     Motors_c() {}
@@ -47,75 +40,14 @@ class Motors_c {
 
       analogWrite( L_PWM , 0 );
       analogWrite( R_PWM , 0 );
-
-      enable_demand = false;
-      enable_demand_ms = 5000; // wait 5s before enabling demand
     }
 
-    void setTurn(float fwd_bias_pwm, float turn_pwm, unsigned long duration_ms) {
-      float left_bias, right_bias;
-      computeTurnBias(fwd_bias_pwm, turn_pwm, left_bias, right_bias);
-      stop_moving_at = millis() + duration_ms;
-      setPWM(left_bias, right_bias);
-      is_stopped = false;
-    }
-
-    void doFinished() {
-      analogWrite(6, HIGH);
-      while(1){
-        left_demand = 0;
-        right_demand = 0;
-        setPWM(0,0);
-        delay(100);
-      }
-    }
-
-    void obeyDemand() {
-      const unsigned long now = millis();
-      if (now - pid_update_ts <= PID_UPDATE_MS) {return;}
-      pid_update_ts = now;
-      const float l_pwm = left_pid.update(left_demand, smoothed_speed_left);
-      const float r_pwm = right_pid.update(right_demand, smoothed_speed_right);
-      setPWM(l_pwm, r_pwm);
-    }
-
-    bool checkMovingDemand() {
-      if (!is_stopped_demand && millis() > stop_moving_at_demand) {
-        left_demand = 0;
-        right_demand = 0;
-        is_stopped_demand = true;
-      }
-      return !is_stopped_demand;
-    }
-
-    bool checkMoving() {
+    bool checkMoving(unsigned long stop_moving_at) {
       if (!is_stopped && millis() > stop_moving_at) {
         setPWM(0, 0);
         is_stopped = true;
       }
       return is_stopped;
-    }
-
-    void checkDemand() {
-      if (!enable_demand) {return;}
-      obeyDemand(); // Set motor PWM according to demand
-    }
-
-    void checkEnableDemand() {
-      // Wait for demand to be enabled after initialisation delay
-      if (!enable_demand && millis() > enable_demand_ts + enable_demand_ms) {
-        enable_demand = true;
-        left_pid.reset();
-        right_pid.reset();
-        heading.reset();
-      }
-    }
-
-    void doFoundCup() {
-      current_state = FOUND_CUP;
-      enable_demand_ts = millis() - enable_demand_ms + 500;
-      enable_demand = false;
-      setPWM(0,0);
     }
 
     void setPWM( float left_pwr, float right_pwr ) {
@@ -139,12 +71,10 @@ class Motors_c {
       return;
     }
 
-    void stopRobot() {
-      motors.setPWM(0, 0);
-      enable_demand = true;
+    void stopAfterTurn(float left_bias, float right_bias, float fwd_bias_pwm, float turn_pwm, unsigned long duration_ms) {
+      setPWM(left_bias, right_bias);
+      is_stopped = false;
     }
 }; // End of Motors_c class definition.
-
-
 
 #endif

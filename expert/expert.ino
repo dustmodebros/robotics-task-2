@@ -32,6 +32,14 @@ float last_smoothed_speed_left;
 float smoothed_speed_right;
 float last_smoothed_speed_right;
 
+// DEMAND
+bool is_stopped_demand;
+bool enable_demand;
+unsigned long enable_demand_ts;
+unsigned long enable_demand_ms; // wait 5s before enabling demand
+unsigned long stop_moving_at;
+unsigned long stop_moving_at_demand;
+
 // PID TUNING
 PID_c left_pid;
 PID_c right_pid;
@@ -179,7 +187,7 @@ void calibrateSensors() {
   const unsigned long duration = 2400;
 
   while (millis() - start_time < duration) {
-    motors.setTurn(0.175, 1, 100); // rotate clockwise for 100 milliseconds
+    setTurn(0.175, 1, 100); // rotate clockwise for 100 milliseconds
 
     // Line sensor calibration
     line_sensors.calibrate();
@@ -220,7 +228,7 @@ bool checkTurn() {
       // on a speed demand and measurement.
       float l_pwm = left_pid.update( demand_turn_speed, smoothed_speed_left );
       float r_pwm = right_pid.update( -demand_turn_speed, smoothed_speed_right );
-      
+
       // Send the PWM output to the left and right motor
       motors.setPWM(l_pwm, r_pwm);
     }
@@ -229,11 +237,59 @@ bool checkTurn() {
       return false;
   } else {
     // Turn finished, stop the robot.
-    motors.stopRobot();
+    motors.setPWM(0, 0);
+    enable_demand = true;
     // Signal that the turn finished by
     // returning "true".
     return true;
   }
+}
+
+void checkDemand() {
+  if (!enable_demand) {return;}
+  obeyDemand(); // Set motor PWM according to demand
+}
+
+void doFoundCup() {
+  current_state = FOUND_CUP;
+  enable_demand_ts = millis() - enable_demand_ms + 500;
+  enable_demand = false;
+  motors.setPWM(0,0);
+}
+
+void checkEnableDemand() {
+  // Wait for demand to be enabled after initialisation delay
+  if (!enable_demand && millis() > enable_demand_ts + enable_demand_ms) {
+    enable_demand = true;
+    left_pid.reset();
+    right_pid.reset();
+    heading.reset();
+  }
+}
+
+void setTurn(float fwd_bias_pwm, float turn_pwm, unsigned long duration_ms) {
+  float left_bias, right_bias;
+  computeTurnBias(fwd_bias_pwm, turn_pwm, left_bias, right_bias);
+  stop_moving_at = millis() + duration_ms;
+  motors.stopAfterTurn(left_bias, right_bias, fwd_bias_pwm, turn_pwm, duration_ms);
+}
+
+void obeyDemand() {
+  const unsigned long now = millis();
+  if (now - pid_update_ts <= PID_UPDATE_MS) {return;}
+  pid_update_ts = now;
+  const float l_pwm = left_pid.update(left_demand, smoothed_speed_left);
+  const float r_pwm = right_pid.update(right_demand, smoothed_speed_right);
+  motors.setPWM(l_pwm, r_pwm);
+}
+
+bool checkMovingDemand() {
+  if (!is_stopped_demand && millis() > stop_moving_at_demand) {
+    left_demand = 0;
+    right_demand = 0;
+    is_stopped_demand = true;
+  }
+  return !is_stopped_demand;
 }
 
 void updatePose(){
@@ -278,6 +334,9 @@ void setup() {
   // will get stuck here and print the below message.
   magnetometer.initialise();
 
+  enable_demand = false;
+  enable_demand_ms = 5000; // wait 5s before enabling demand
+
   left_pid.initialise(0.3, 0.001, 0.0); // tuned values
   right_pid.initialise(0.31, 0.001, 0.0);
   heading.initialise(0.7, 0.0, 0.0); 
@@ -299,17 +358,13 @@ void doSearch() {
       setTravel(waypoints_x[current_waypoint % 7], waypoints_y[current_waypoint % 7]);
     }
   if (magnetometer.convertToMagnitude() > 2.7){
-    motors.doFoundCup();
+    setTurn(-0.2,0,400);
+    current_state = BACKING_UP;
   }
 }
 
-void doFoundCup() {
-  motors.setTurn(-0.2,0,400);
-  current_state = BACKING_UP;
-}
-
 void doBackingUp() {
-  if (motors.checkMoving()){
+  if (motors.checkMoving(stop_moving_at)){
     current_state = GOTO_BEHIND_CUP;
   }
 }
@@ -382,6 +437,16 @@ void doWaitForReset() {
   }
 }
 
+void doFinished() {
+  analogWrite(6, HIGH);
+  while(1){
+    left_demand = 0;
+    right_demand = 0;
+    motors.setPWM(0,0);
+    delay(100);
+  }
+}
+
 void doDebug() {
   if (millis() > debug_ts + debug_ms){
     debug_ts = millis();
@@ -427,7 +492,7 @@ void checkState() {
       doWaitForReset();
       break;
     case FINISHED:
-      motors.doFinished();
+      doFinished();
       break;
     case DEBUG:
       doDebug();
@@ -453,10 +518,10 @@ void driftWaypoints() {
 
 void loop() {
   checkStop();
-  motors.checkEnableDemand();  
-  (void)motors.checkMoving();
+  checkEnableDemand();  
+  (void)motors.checkMoving(stop_moving_at);
   computeSpeed(); // update global variables with new speed estimates
-  motors.checkDemand();
+  checkDemand();
   updatePose(); // update kinematics
   driftWaypoints();
   magnetometer.doCalibratedReadings();
