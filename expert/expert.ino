@@ -52,9 +52,6 @@ unsigned long pid_update_ts;  // timestamp for updating PID values
 unsigned long debug_ts = millis();
 unsigned long debug_ms = 500;
 
-// KINEMATICS TUNING
-unsigned long pose_update_ts = millis();
-unsigned long pose_update_ms = 30;
 
 // CLOSED-LOOP CONTROL
 float target_angle = 0;
@@ -153,11 +150,10 @@ bool checkTravel(float stop_distance_mm = -1) {
   }
   travel_ts = now;
 
-  const float dist_sq = pow(pose.x - target_x, 2) + pow(pose.y - target_y, 2); // distance to the stopping point
+  const float dist_sq = pose.distSq(target_x, target_y); // distance to the stopping point
   const float threshold_sq = (stop_distance_mm > 0) ? (stop_distance_mm * stop_distance_mm) : POSITION_TOLERANCE;
   if (dist_sq > threshold_sq) {
-    const float theta_d = atan2(target_y-pose.y, target_x-pose.x); // desired angle
-    const float diff = smallestAngle(pose.theta, theta_d);
+    const float diff = pose.angleDiff(target_x, target_y);
     const float turn_scaling_factor = 0.5;
 
     if (abs(diff) > TURN_IN_PLACE_THRESHOLD) {
@@ -198,19 +194,12 @@ void calibrateSensors() {
   }
 }
 
-float smallestAngle(float theta_i, float desired_angle) {
-  float diff = desired_angle - theta_i;
-  while (diff > PI) diff -= 2.0f * PI;
-  while (diff < -PI) diff += 2.0f * PI;
-  return diff;
-}
-
 // A non-blocking function to rotate the robot
 // until a desired kinematics theta angle is
 // achieved.
 bool checkTurn() {
   // Have we finished the turn? If not:
-  float angle_diff = smallestAngle(pose.theta, target_angle);
+  float angle_diff = pose.smallestAngle(target_angle);
   const float turn_gain = 1;
   if(abs(angle_diff) > TURNING_SENSITIVITY) {
     if (millis() > travel_ts + travel_ms){
@@ -292,14 +281,6 @@ bool checkMovingDemand() {
   return !is_stopped_demand;
 }
 
-void updatePose(){
-  unsigned long now = millis();
-  if (now > pose_update_ts + pose_update_ms) {
-    pose_update_ts = now;
-    pose.update();
-  }
-}
-
 void setup() {
   pinMode( BUZZER_PIN, OUTPUT );
   Wire.begin();
@@ -355,8 +336,8 @@ void setup() {
 void doSearch() {
   if (checkTravel()){
     current_waypoint += 1;
-      setTravel(waypoints_x[current_waypoint % 7], waypoints_y[current_waypoint % 7]);
-    }
+    setTravel(waypoints_x[current_waypoint % 7], waypoints_y[current_waypoint % 7]);
+  }
   if (magnetometer.convertToMagnitude() > 2.7){
     setTurn(-0.2,0,400);
     current_state = BACKING_UP;
@@ -381,9 +362,9 @@ void doGotoBehindCup() {
   float potential_y_2 = cup_location_y - cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
 
   // pathway waypoint will be whichever of the potentials is closest to the current pose x and y
-  float distance_target = sqrt(pow(alignment_target_x - pose.x, 2) + pow(alignment_target_y - pose.y, 2));
-  float distance_potential_1 = sqrt(pow(potential_x_1 - pose.x, 2) + pow(potential_y_1 - pose.y, 2));
-  float distance_potential_2 = sqrt(pow(potential_x_2 - pose.x, 2) + pow(potential_y_2 - pose.y, 2));
+  float distance_target = pose.dist(alignment_target_x, alignment_target_y);
+  float distance_potential_1 = pose.dist(potential_x_1, potential_y_1);
+  float distance_potential_2 = pose.dist(potential_x_2, potential_y_2);
   if (distance_target < distance_potential_1 and distance_target < distance_potential_2){
 //  Serial.println("Going straight to the alignment point");
     current_state = STRAIGHT_TO_BEHIND;
@@ -416,7 +397,7 @@ void doStraightToBehind() {
 }
 
 void doPointAtOrigin() {
-  target_angle = atan2(-pose.x, -pose.y);
+  target_angle = pose.angleToOrigin();
   if(checkTurn()){
     current_state = GOTO_ORIGIN;
   }
@@ -431,10 +412,9 @@ void doGotoOrigin() {
 }
 
 void doWaitForReset() {
-  if (now + 4000 < millis()){
-    current_state = SEARCH;
-    current_waypoint = 0;
-  }
+  if (now + 4000 >= millis()){return;}
+  current_state = SEARCH;
+  current_waypoint = 0;
 }
 
 void doFinished() {
@@ -448,18 +428,17 @@ void doFinished() {
 }
 
 void doDebug() {
-  if (millis() > debug_ts + debug_ms){
-    debug_ts = millis();
-    Serial.print(pose.x);
-    Serial.print(", ");
-    Serial.print(pose.y);
-    Serial.print(", ");
-    Serial.print(pose.theta);
-    Serial.print(",           ");
-    Serial.print(target_x);
-    Serial.print(",");
-    Serial.println(target_y);
-  }
+  if (millis() <= debug_ts + debug_ms){return;}
+  debug_ts = millis();
+  // Serial.print(pose.x);
+  // Serial.print(", ");
+  // Serial.print(pose.y);
+  // Serial.print(", ");
+  // Serial.print(pose.theta);
+  // Serial.print(",           ");
+  Serial.print(target_x);
+  Serial.print(",");
+  Serial.println(target_y);
 }
 
 void checkState() {
@@ -522,7 +501,7 @@ void loop() {
   (void)motors.checkMoving(stop_moving_at);
   computeSpeed(); // update global variables with new speed estimates
   checkDemand();
-  updatePose(); // update kinematics
+  pose.checkUpdate(); // update kinematics
   driftWaypoints();
   magnetometer.doCalibratedReadings();
   checkState();

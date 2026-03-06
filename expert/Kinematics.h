@@ -29,21 +29,61 @@ const float mm_per_count  = ( 2.0 * wheel_radius * PI ) / count_per_rev;
 
 // Class to track robot position.
 class Kinematics_c {
-  public:
-
+  private:
     // Pose
-    float x,y,theta;
-
-    // To calculate the difference
-    // in encoder counts for each
-    // call to update()
+    float x, y, theta;
     long last_e1;
     long last_e0;
-  
-    // Constructor, must exist.
-    Kinematics_c() {
+    
+    unsigned long pose_update_ts;
+    unsigned long pose_update_ms;
 
-    } 
+    float desiredAngle(float target_x, float target_y) {
+      return atan2(target_y-y, target_x-x);
+    }
+
+    void update() {
+      long delta_e1;  // change in counts
+      long delta_e0;  // change in counts
+      float mean_delta;
+       
+      float x_contribution;   // linear translation
+      float th_contribution;  // rotation
+
+      // How many counts since last update()?
+      delta_e1 = count_e1 - last_e1;
+      delta_e0 = count_e0 - last_e0;
+
+      // Used last encoder values, so now update to
+      // current for next iteration
+      last_e1 = count_e1;
+      last_e0 = count_e0;
+        
+      // Work out x contribution in local frame.
+      mean_delta = (float)delta_e1;
+      mean_delta += (float)delta_e0;
+      mean_delta /= 2.0;
+
+      x_contribution = mean_delta * mm_per_count;
+
+      // Work out rotation in local frame
+      th_contribution = (float)delta_e0;
+      th_contribution -= (float)delta_e1;
+      th_contribution *= mm_per_count;
+      th_contribution /= (wheel_sep *2.0);
+
+      // Update global frame by taking these
+      // local contributions, projecting a point
+      // and adding to global pose.
+      x = x + x_contribution * cos( theta );
+      y = y + x_contribution * sin( theta );
+      theta = theta + th_contribution;
+      // Done!
+    }
+
+  public:
+    // Constructor, must exist.
+    Kinematics_c() {} 
 
     // Used to setup kinematics, and to set a start position
     void initialise( float start_x, float start_y, float start_th ) {
@@ -52,59 +92,41 @@ class Kinematics_c {
       x = start_x;
       y = start_y;
       theta = start_th;
+
+      pose_update_ts = millis();
+      pose_update_ms = 30;
     }
-    
-    // Here I have opted to use encoder counts rather than 
-    // wheel velocity.  Either way will work.  
-    // With velocity, the difference in time between updates 
-    // is required (distance = speed / time ).
-    // If we use the velocity, it means we have to do
-    // extra computation just to get back to distance, which
-    // we had in the first place (as change of encoder counts)
-    void update( ) {
-      
-        long delta_e1;  // change in counts
-        long delta_e0;  // change in counts
-        float mean_delta;
-         
-        float x_contribution;   // linear translation
-        float th_contribution;  // rotation
 
-        // How many counts since last update()?
-        delta_e1 = count_e1 - last_e1;
-        delta_e0 = count_e0 - last_e0;
+    float distSq(float target_x, float target_y) {
+      return pow(x - target_x, 2) + pow(y - target_y, 2);
+    }
 
-        // Used last encoder values, so now update to
-        // current for next iteration
-        last_e1 = count_e1;
-        last_e0 = count_e0;
-        
-        // Work out x contribution in local frame.
-        mean_delta = (float)delta_e1;
-        mean_delta += (float)delta_e0;
-        mean_delta /= 2.0;
+    float dist(float target_x, float target_y) {
+      return sqrt(distSq(target_x, target_y));
+    }
 
-        x_contribution = mean_delta * mm_per_count;
+    float smallestAngle(float desired_angle) {
+      float diff = desired_angle - theta;
+      while (diff > PI) diff -= 2.0f * PI;
+      while (diff < -PI) diff += 2.0f * PI;
+      return diff;
+    }
 
-        // Work out rotation in local frame
-        th_contribution = (float)delta_e0;
-        th_contribution -= (float)delta_e1;
-        th_contribution *= mm_per_count;
-        th_contribution /= (wheel_sep *2.0);
+    float angleDiff(float target_x, float target_y) {
+      return smallestAngle(desiredAngle(target_x, target_y));
+    }
 
+    float angleToOrigin() {
+      return atan2(-x, -y);
+    }
 
-        // Update global frame by taking these
-        // local contributions, projecting a point
-        // and adding to global pose.
-        x = x + x_contribution * cos( theta );
-        y = y + x_contribution * sin( theta );
-        theta = theta + th_contribution;
-
-        // Done!
-    } // End of update()
-
-}; // End of Kinematics_c class defintion
-
+    void checkUpdate() {
+      unsigned long now = millis();
+      if (now <= pose_update_ts + pose_update_ms) {return;}
+      pose_update_ts = now;
+      update();
+    }
+};
 
 
 #endif
