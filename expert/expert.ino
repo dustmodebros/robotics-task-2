@@ -6,12 +6,14 @@
 #include "Magnetometer.h"
 #include "Kinematics.h"
 #include "Encoders.h"
+#include "Waypoints.h"
 
 Motors_c motors;
 LineSensors_c line_sensors;
 Magnetometer_c magnetometer;
 Kinematics_c pose;
 Speed speed;
+Waypoints waypoints;
 
 // --- GLOBAL VARIABLES ---
 
@@ -64,12 +66,6 @@ unsigned long travel_ms = 50;
 // WAYPOINTS
 #define NUM_WAYPOINTS 7
 #define CUP_AVOIDANCE_AMOUNT 150
-float waypoints_x[NUM_WAYPOINTS] = {0, 69.83, 266.69, 432.97, 411.76, 355.68, 162.42};
-float waypoints_y[NUM_WAYPOINTS] = {0, 269.21, 215.27, 264.17, 102.55, -18.66, 85.01}; //1, 2, 3, 4, 5 and 6
-int current_waypoint = 0;
-float origin_y = 0;  // Drifted with waypoints
-unsigned long waypoint_drift_ts = 0;
-#define WAYPOINT_DRIFT_RATE_MM_S (- 5.0f / 24.0f)
 
 // STOP TIMER
 unsigned long stop_ts;
@@ -265,8 +261,8 @@ void setup() {
   setupEncoder1();
 
   speed.initialise();
-
   pose.initialise(0, 0, 0);
+  waypoints.initialise();
 
   current_state = SEARCH;
 
@@ -301,8 +297,8 @@ void setup() {
 
 void doSearch() {
   if (checkTravel()){
-    current_waypoint += 1;
-    setTravel(waypoints_x[current_waypoint % 7], waypoints_y[current_waypoint % 7]);
+    waypoints.increment();
+    setTravel(waypoints.current_x(), waypoints.current_x());
   }
   if (magnetometer.convertToMagnitude() > 2.7){
     setTurn(-0.2,0,400);
@@ -317,8 +313,8 @@ void doBackingUp() {
 }
 
 void doGotoBehindCup() {
-  float cup_location_x = waypoints_x[current_waypoint % 7];
-  float cup_location_y = waypoints_y[current_waypoint % 7];
+  float cup_location_x = waypoints.current_x();
+  float cup_location_y = waypoints.current_y();
   float cup_theta = atan2(cup_location_y,cup_location_x);
   alignment_target_x = cup_location_x + cos(cup_theta) * CUP_AVOIDANCE_AMOUNT;
   alignment_target_y = cup_location_y + sin(cup_theta) * CUP_AVOIDANCE_AMOUNT;
@@ -370,7 +366,7 @@ void doPointAtOrigin() {
 }
 
 void doGotoOrigin() {
-  setTravel(0, origin_y);
+  setTravel(0, waypoints.origin_y);
   if (checkTravel(90)) {  // Stop when within 90mm of origin to avoid pushing cup out of end zone
     now = millis();
     current_state = WAIT_FOR_RESET;
@@ -380,7 +376,7 @@ void doGotoOrigin() {
 void doWaitForReset() {
   if (now + 4000 >= millis()){return;}
   current_state = SEARCH;
-  current_waypoint = 0;
+  waypoints.current = 0;
 }
 
 void doFinished() {
@@ -450,17 +446,6 @@ void checkStop() {
   current_state = FINISHED;
 }
 
-void driftWaypoints() {
-  // Drift waypoints' and origin's y coordinates by -5/24 mm every second
-  if (millis() - waypoint_drift_ts >= 1000) {
-    waypoint_drift_ts = millis();
-    for (int i = 0; i < NUM_WAYPOINTS; i++) {
-      waypoints_y[i] -= WAYPOINT_DRIFT_RATE_MM_S;
-    }
-    origin_y -= WAYPOINT_DRIFT_RATE_MM_S;
-  }
-}
-
 void loop() {
   checkStop();
   checkEnableDemand();  
@@ -468,7 +453,7 @@ void loop() {
   speed.computeSpeed(); // update global variables with new speed estimates
   checkDemand();
   pose.checkUpdate(); // update kinematics
-  driftWaypoints();
+  waypoints.doDrift();
   magnetometer.doCalibratedReadings();
   checkState();
 }
