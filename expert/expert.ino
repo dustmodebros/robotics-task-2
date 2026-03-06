@@ -21,8 +21,6 @@ Demand demand;
 // BUZZER
 #define BUZZER_PIN 6
 
-#define PID_UPDATE_MS 50     // periodicity of PID update
-
 // DEBUG PRINTS
 unsigned long debug_ts = millis();
 unsigned long debug_ms = 500;
@@ -175,16 +173,6 @@ void obeyDemand() {
 void setup() {
   pinMode( BUZZER_PIN, OUTPUT );
   Wire.begin();
-  motors.initialise(); // begin motor control
-  line_sensors.initialiseForADC();
-  setupEncoder0();
-  setupEncoder1();
-
-  speed.initialise();
-  pose.initialise(0, 0, 0);
-  waypoints.initialise();
-
-  current_state = SEARCH;
 
   // Activates the Serial port, and the delay
   // is used to wait for the connection to be
@@ -195,8 +183,16 @@ void setup() {
 
   // If you have a problem with your magnetometer, your code
   // will get stuck here and print the below message.
+  motors.initialise();
+  line_sensors.initialiseForADC();
   magnetometer.initialise();
   demand.initialise();
+  speed.initialise();
+  pose.initialise(0, 0, 0);
+  waypoints.initialise();
+
+  current_state = SEARCH;
+
   calibrateSensors();
 
   stop_ts = millis() + 240000; // stop after four minutes

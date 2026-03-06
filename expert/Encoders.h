@@ -48,6 +48,9 @@ class Speed {
       speed_left = 0.0;
       speed_right = 0.0;
 
+      setupEncoder0();
+      setupEncoder1();
+
       speed_est_ts = millis(); // initialise timestamp for speed estimation
     }
 
