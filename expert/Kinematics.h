@@ -18,9 +18,9 @@ extern volatile long count_e1;
 // the robot dimensions.  You will need
 // to calibrate these to get the best
 // performance. (see Labsheet 4)
-extern float count_per_rev;
-extern float wheel_radius;
-extern float wheel_sep;                                    
+const extern float count_per_rev;
+const extern float wheel_radius;
+const extern float wheel_sep;                                    
 
 // Take the circumference of the wheel and divide by the 
 // number of counts per revolution. This provides the mm
