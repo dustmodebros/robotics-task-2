@@ -11,26 +11,12 @@ Motors_c motors;
 LineSensors_c line_sensors;
 Magnetometer_c magnetometer;
 Kinematics_c pose;
+Speed speed;
 
 // --- GLOBAL VARIABLES ---
 
 // BUZZER
 #define BUZZER_PIN 6
-
-// SPEED ESTIMATION
-#define SPEED_EST_MS 10     // estimate speed every 10ms
-unsigned long speed_est_ts;   // timestamp for speed estimation
-long last_e0; // previous count of pulses from encoder 0
-float speed_left; // Wheel speed as a global float
-long last_e1; // last right encoder pulses
-float speed_right; // right wheel speed
-
-// SPEED SMOOTHING
-#define SMOOTHING_FACTOR 0.7  // factor for smoothing of speed estimation
-float smoothed_speed_left;
-float last_smoothed_speed_left;
-float smoothed_speed_right;
-float last_smoothed_speed_right;
 
 // DEMAND
 bool is_stopped_demand;
@@ -109,27 +95,6 @@ void computeTurnBias(float fwd_bias_pwm, float turn_pwm, float& left_bias, float
   float remove_from_left = (turn_pwm <= 0) ? abs(turn_amount) : 0;
   right_bias = fwd_bias_pwm - 2 * remove_from_right;
   left_bias = fwd_bias_pwm - 2 * remove_from_left;
-}
-
-void computeSpeed() {
-  const unsigned long elapsed_time = millis() - speed_est_ts;
-  if (elapsed_time <= SPEED_EST_MS) {return;}
-  speed_est_ts = millis();
-  // Work out the difference in encoder counts
-  const long count_difference_right = count_e0 - last_e0;
-  const long count_difference_left = count_e1 - last_e1;
-  // Save the current count as the last count
-  last_e0 = count_e0;
-  last_e1 = count_e1;
-  // turn counts into speed by dividing by timestep
-  speed_left = count_difference_left / float(SPEED_EST_MS);
-  speed_right = count_difference_right / float(SPEED_EST_MS);
-  // compute smoothed speed
-  smoothed_speed_left = (SMOOTHING_FACTOR * speed_left) + ((1 - SMOOTHING_FACTOR) * last_smoothed_speed_left);
-  smoothed_speed_right = (SMOOTHING_FACTOR * speed_right) + ((1 - SMOOTHING_FACTOR) * last_smoothed_speed_right);
-  // set current smoothed speed as previous for next loop
-  last_smoothed_speed_left = smoothed_speed_left;
-  last_smoothed_speed_right = smoothed_speed_right;
 }
 
 void setTravel(float x, float y) {
@@ -215,8 +180,8 @@ bool checkTurn() {
   
       // Generate the required PWM signal based
       // on a speed demand and measurement.
-      float l_pwm = left_pid.update( demand_turn_speed, smoothed_speed_left );
-      float r_pwm = right_pid.update( -demand_turn_speed, smoothed_speed_right );
+      float l_pwm = left_pid.update( demand_turn_speed, speed.smoothed_speed_left );
+      float r_pwm = right_pid.update( -demand_turn_speed, speed.smoothed_speed_right );
 
       // Send the PWM output to the left and right motor
       motors.setPWM(l_pwm, r_pwm);
@@ -267,8 +232,8 @@ void obeyDemand() {
   const unsigned long now = millis();
   if (now - pid_update_ts <= PID_UPDATE_MS) {return;}
   pid_update_ts = now;
-  const float l_pwm = left_pid.update(left_demand, smoothed_speed_left);
-  const float r_pwm = right_pid.update(right_demand, smoothed_speed_right);
+  const float l_pwm = left_pid.update(left_demand, speed.smoothed_speed_left);
+  const float r_pwm = right_pid.update(right_demand, speed.smoothed_speed_right);
   motors.setPWM(l_pwm, r_pwm);
 }
 
@@ -289,16 +254,7 @@ void setup() {
   setupEncoder0();
   setupEncoder1();
 
-  // This takes the initial count from encoder 0
-  // and saves it as the "last" (previous) count
-  last_e0 = count_e0;
-  last_e1 = count_e1;
-
-  // Assuming we start with motors off.
-  speed_left = 0.0;
-  speed_right = 0.0;
-
-  speed_est_ts = millis(); // initialise timestamp for speed estimation
+  speed.initialise();
 
   pose.initialise(0, 0, 0);
 
@@ -499,7 +455,7 @@ void loop() {
   checkStop();
   checkEnableDemand();  
   (void)motors.checkMoving(stop_moving_at);
-  computeSpeed(); // update global variables with new speed estimates
+  speed.computeSpeed(); // update global variables with new speed estimates
   checkDemand();
   pose.checkUpdate(); // update kinematics
   driftWaypoints();
