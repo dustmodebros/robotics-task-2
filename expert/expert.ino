@@ -38,7 +38,6 @@ unsigned long pid_update_ts;  // timestamp for updating PID values
 unsigned long debug_ts = millis();
 unsigned long debug_ms = 500;
 
-
 // CLOSED-LOOP CONTROL
 float target_angle = 0;
 #define TURNING_SENSITIVITY PI/256 //when to stop turning

@@ -5,6 +5,7 @@
 #define _KINEMATICS_H
 
 #include <math.h>
+#include "Tuning.h"
 
 // These two commands mean that this header file
 // will attempt to use some global variables of
@@ -17,10 +18,9 @@ extern volatile long count_e1;
 // the robot dimensions.  You will need
 // to calibrate these to get the best
 // performance. (see Labsheet 4)
-const float count_per_rev = 358.3;   // From documentation - correct.
-const float wheel_radius  = 16.8;    // mm, could vary - calibrate. 
-const float wheel_sep     = 44.0;    // mm, from centre of robot to wheel centre 
-                                     //     - could vary, calibrate
+extern float count_per_rev;
+extern float wheel_radius;
+extern float wheel_sep;                                    
 
 // Take the circumference of the wheel and divide by the 
 // number of counts per revolution. This provides the mm
