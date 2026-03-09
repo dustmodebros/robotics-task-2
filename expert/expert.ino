@@ -150,13 +150,6 @@ void checkDemand() {
   obeyDemand(); // Set motor PWM according to demand
 }
 
-void doFoundCup() {
-  current_state = FOUND_CUP;
-  demand.enable_demand_ts = millis() - demand.enable_demand_ms + 500;
-  demand.enable_demand = false;
-  motors.setPWM(0,0);
-}
-
 void setTurn(float fwd_bias_pwm, float turn_pwm, unsigned long duration_ms) {
   float left_bias, right_bias;
   computeTurnBias(fwd_bias_pwm, turn_pwm, left_bias, right_bias);
@@ -179,6 +172,13 @@ void doSearch() {
     setTurn(-0.2,0,400);
     current_state = BACKING_UP;
   }
+}
+
+void doFoundCup() {
+  current_state = FOUND_CUP;
+  demand.enable_demand_ts = millis() - demand.enable_demand_ms + 500;
+  demand.enable_demand = false;
+  motors.setPWM(0,0);
 }
 
 void doBackingUp() {
