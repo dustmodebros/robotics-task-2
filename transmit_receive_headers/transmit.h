@@ -8,8 +8,9 @@ class Transmitter {
     int longPulseMs;
     int interBitMs;
 
-    uint16_t myPayload;  // 10 bits: 8 data + 2 checksum
-    int bitNum;          // counts from 9 down to 0
+    uint16_t myPayload;
+    int bitNum;
+    int totalBits;
 
     bool sending;
     unsigned long send_byte_ts;
@@ -30,6 +31,11 @@ class Transmitter {
     
     bool inter_bit;
     unsigned long inter_bit_ts;
+
+    bool skipSync;
+
+    // Sequence number (alternating 0/1)
+    byte currentSeq;
 
     byte interleavedParity(byte data) {
       byte even_parity = 0;
@@ -138,17 +144,39 @@ class Transmitter {
     
       inter_bit = false;
       inter_bit_ts = 0;
+
+      skipSync = false;
+      totalBits = 11;
+      currentSeq = 0;
     }
     
+    // Send a full byte with sync pulse, interleaved parity, and SEQ bit
+    // Format: [8 data bits] [2 checksum bits] [1 SEQ bit] = 11 bits
     void sendByte(byte data) {
       if (sending || millis() < send_byte_ts + 30) {return;}
       sending = true;
+      skipSync = false;
       
       byte checksum = interleavedParity(data);
-      myPayload = ((uint16_t)data << 2) | checksum;
-      bitNum = 9;
+      // Payload: data(8) | checksum(2) | seq(1) = 11 bits
+      myPayload = ((uint16_t)data << 3) | (checksum << 1) | currentSeq;
+      bitNum = 10;  // 11 bits, 0-indexed from 10
+      totalBits = 11;
       
       startSync();
+    }
+
+    // Send raw bits without sync (for ACK)
+    void sendBits(byte bits, int numBits) {
+      if (sending || millis() < send_byte_ts + 30) {return;}
+      sending = true;
+      skipSync = true;
+      
+      myPayload = bits;
+      bitNum = numBits - 1;
+      totalBits = numBits;
+      
+      startPulse();
     }
 
     void check() {
@@ -158,22 +186,17 @@ class Transmitter {
       checkPulse();
       checkPadding();
     }
+
+    bool isSending() {
+      return sending;
+    }
+
+    // Called when ACK is received - increment SEQ for next transmission
+    void ackReceived() {
+      currentSeq = currentSeq ^ 1;  // Toggle between 0 and 1
+    }
+
+    byte getSeq() {
+      return currentSeq;
+    }
 };
-
-Transmitter transmitter;
-byte testByte;
-
-void setup() {
-  pinMode(EMIT_PIN, OUTPUT);
-  digitalWrite(EMIT_PIN, LOW);
-  transmitter.init(150, 50, 60, 100, 50);  // sync=90ms, post-sync=20ms, short=30ms, long=60ms, inter-bit=10ms
-  testByte = 0xAA;
-
-  Serial.begin(9600);
-  delay(2000);
-}
-
-void loop() {
-  transmitter.sendByte(testByte);
-  transmitter.check();
-}
