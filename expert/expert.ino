@@ -170,35 +170,6 @@ void obeyDemand() {
   motors.setPWM(l_pwm, r_pwm);
 }
 
-void setup() {
-  pinMode( BUZZER_PIN, OUTPUT );
-  Wire.begin();
-
-  // Activates the Serial port, and the delay
-  // is used to wait for the connection to be
-  // established.
-  Serial.begin(9600);
-  delay(2000);
-  Serial.println(" *** READY *** ");
-
-  // If you have a problem with your magnetometer, your code
-  // will get stuck here and print the below message.
-  motors.initialise();
-  line_sensors.initialiseForADC();
-  magnetometer.initialise();
-  demand.initialise();
-  speed.initialise();
-  pose.initialise(0, 0, 0);
-  waypoints.initialise();
-
-  current_state = SEARCH;
-
-  calibrateSensors();
-
-  stop_ts = millis() + 240000; // stop after four minutes
-}
-
-
 void doSearch() {
   if (checkTravel()){
     waypoints.increment();
@@ -347,6 +318,34 @@ void checkState() {
 void checkStop() {
   if (millis() < stop_ts) {return;}
   current_state = FINISHED;
+}
+
+void setup() {
+  pinMode( BUZZER_PIN, OUTPUT );
+  Wire.begin();
+
+  // Activates the Serial port, and the delay
+  // is used to wait for the connection to be
+  // established.
+  Serial.begin(9600);
+  delay(2000);
+  Serial.println(" *** READY *** ");
+
+  // If you have a problem with your magnetometer, your code
+  // will get stuck here and print the below message.
+  motors.initialise();
+  line_sensors.initialiseForADC();
+  magnetometer.initialise();
+  demand.initialise();
+  speed.initialise();
+  pose.initialise(0, 0, 0);
+  waypoints.initialise();
+
+  current_state = SEARCH;
+
+  calibrateSensors();
+
+  stop_ts = millis() + 240000; // stop after four minutes
 }
 
 void loop() {
