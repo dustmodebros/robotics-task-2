@@ -44,6 +44,9 @@ Right now the timings are as follows:
 | LONG_PULSE_MS        | 60 (1)                                        |
 | PULSE_TOLERANCE      | 2 (the extent that the pulse can be too long) |
 
+## Tuned Variables
+I moved all tuned variables into a folder called ```Tuning.h```---this has been put in ```.gitignore```, but you can download it [here](https://drive.google.com/file/d/1YrC6YSxEQAB-BpI3qaqIrquwSmXcydWW/view?usp=sharing). Remember to put your own tuning variables in it.
+
 ## Notes
 Going for a smaller timescale to up the bitrate seems to run into problems where we struggle to read the pulses due to the latency on reading the IR sensor, as well as delays caused by execution on the microcontroller.
 Unfortunately this limits us to a somewhat piddly ~1.4ish Bytes/sec. Additionally, going slower seems to make the connection less fiddly and precise.
