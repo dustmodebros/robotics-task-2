@@ -6,6 +6,9 @@ Branch protection is on! All changes have to be done on a PR now, and PRs to mai
 
 We need to better define what the task _is_ specifically. We need a flowchart or something describing an individual robot's behaviour, will they need to synchronise? See issue #1 for list of things we need to figure out.
 
+## Running the Code
+To run the code, you will have to download a file called ```Tuning.h```. This provides one spot to put all tuned variables. This has been put in ```.gitignore```, but you can download it [here](https://drive.google.com/file/d/1YrC6YSxEQAB-BpI3qaqIrquwSmXcydWW/view?usp=sharing). Remember to put your own tuning variables in it.
+
 ## Receive and Transmit
 To use the contents of this repo, first of all clone it, and open each of the transmit and receive .ino files in separate arduino windows.
 Then remove the chassis-s from two Pololu 3pi+ robots, and upload the code respectively to one and the other. You'll need batteries in the transmitter, and your receiver communicating over Serial.
@@ -43,6 +46,7 @@ Right now the timings are as follows:
 | SHORT_PULSE_MS       | 30 (0)                                        |
 | LONG_PULSE_MS        | 60 (1)                                        |
 | PULSE_TOLERANCE      | 2 (the extent that the pulse can be too long) |
+
 
 ## SEQ-based Protocol (Transceiver)
 
