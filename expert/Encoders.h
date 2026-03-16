@@ -13,12 +13,72 @@
 #define ENCODER_1_A_PIN  26
 //#define ENCODER_1_B_PIN Non-standard pin!
 
+#define SPEED_EST_MS 10     // estimate speed every 10ms
+
 
 // Volatile Global variables used by Encoder ISR.
 volatile long count_e0; // used by encoder to count the rotation
 volatile byte state_e0; // used to determine quadrature state
 volatile long count_e1;
 volatile byte state_e1;
+
+void setupEncoder0();
+void setupEncoder1();
+
+class Speed {
+  private:
+    unsigned long speed_est_ts;   // timestamp for speed estimation
+    long last_e0; // previous count of pulses from encoder 0
+    float speed_left; // Wheel speed as a global float
+    long last_e1; // last right encoder pulses
+    float speed_right; // right wheel speed
+    float last_smoothed_speed_left;
+    float last_smoothed_speed_right;
+
+  public:
+    float smoothed_speed_left;
+    float smoothed_speed_right;
+
+    Speed() {}
+
+    void initialise() {
+      // This takes the initial count from the encoders
+      // and saves it as the "last" (previous) count
+      last_e0 = count_e0;
+      last_e1 = count_e1;
+
+      // Assuming we start with motors off.
+      speed_left = 0.0;
+      speed_right = 0.0;
+
+      setupEncoder0();
+      setupEncoder1();
+
+      speed_est_ts = millis(); // initialise timestamp for speed estimation
+    }
+
+    void computeSpeed() {
+      const float SMOOTHING_FACTOR = 0.7;
+      const unsigned long elapsed_time = millis() - speed_est_ts;
+      if (elapsed_time <= SPEED_EST_MS) {return;}
+      speed_est_ts = millis();
+      // Work out the difference in encoder counts
+      const long count_difference_right = count_e0 - last_e0;
+      const long count_difference_left = count_e1 - last_e1;
+      // Save the current count as the last count
+      last_e0 = count_e0;
+      last_e1 = count_e1;
+      // turn counts into speed by dividing by timestep
+      speed_left = count_difference_left / float(SPEED_EST_MS);
+      speed_right = count_difference_right / float(SPEED_EST_MS);
+      // compute smoothed speed
+      smoothed_speed_left = (SMOOTHING_FACTOR * speed_left) + ((1 - SMOOTHING_FACTOR) * last_smoothed_speed_left);
+      smoothed_speed_right = (SMOOTHING_FACTOR * speed_right) + ((1 - SMOOTHING_FACTOR) * last_smoothed_speed_right);
+      // set current smoothed speed as previous for next loop
+      last_smoothed_speed_left = smoothed_speed_left;
+      last_smoothed_speed_right = smoothed_speed_right;
+    }
+};
 
 
 // This ISR handles just Encoder 1
@@ -71,9 +131,6 @@ ISR( INT6_vect ) {
   state_e0 = state_e0 >> 2;
 
 }
-
-
-
 
 // This ISR handles just Encoder 0
 // ISR to read the Encoder0 Channel A and B pins
