@@ -18,17 +18,26 @@
 #define MAX_AXIS 3
 
 class Magnetometer_c {
+  private:
+    LIS3MDL mag;
+    float maximum[MAX_AXIS] = {-9999.0, -9999.0, -9999.0};
+    float minimum[MAX_AXIS] = {9999.0, 9999.0, 9999.0};
+    float readings[MAX_AXIS];
+    unsigned long mag_ts;
+
+    // returns affirmative if new measurements were taken
+    bool getReadings() {
+      // ensure the magnetometer is not engaged too frequently
+      if (millis() < mag_ts + 100) {return false;}
+      mag.read();
+      readings[0] = mag.m.x;
+      readings[1] = mag.m.y;
+      readings[2] = mag.m.z;
+      mag_ts = millis();
+      return true;
+    } // End of getReadings()
 
   public:
-
-    // Instance of the LIS3MDL class used to
-    // interact with the magnetometer device.
-    LIS3MDL mag;
-
-    // A place to store the latest readings 
-    // from the magnetometer
-    float readings[ MAX_AXIS ];
-
     // Constructor, must exist.
     Magnetometer_c () {
       // Leave this empty.
@@ -40,7 +49,6 @@ class Magnetometer_c {
     // to initialise the I2C protocol and the
     // magnetometer sensor
     bool initialise() {
-
       // Start the I2C protocol
       Wire.begin();
 
@@ -50,16 +58,32 @@ class Magnetometer_c {
       } else {
         return true;
       }
-    } // End of initialise()
+      mag.enableDefault();
+    }
 
-    // Function to update readings array with
-    // latest values from the sensor over i2c
-    void getReadings() {
-      mag.read();
-      readings[0] = mag.m.x;
-      readings[1] = mag.m.y;
-      readings[2] = mag.m.z;
-    } // End of getReadings()
+    void calibrate() {
+      if (!getReadings()) {return;}
+      for (int i = 0; i < MAX_AXIS; i++) {
+        maximum[i] = max(readings[i], maximum[i]);
+        minimum[i] = min(readings[i], minimum[i]);
+      }
+    }
+
+    void doCalibratedReadings() {
+      if (!getReadings()) {return;}
+      for (int i = 0; i < MAX_AXIS; i++) {
+        readings[i] = 2.0f * (readings[i] - minimum[i]) / (maximum[i] - minimum[i]) - 1.0f;
+      }
+    }
+
+    float convertToMagnitude() {
+      float sum = 0, reading;
+      for (int i = 0; i < MAX_AXIS; i++) {
+        reading = readings[i];
+        sum += reading * reading;
+      }
+      return sqrt(sum);
+}
 
 }; // End of Magnetometer_c class definition
 

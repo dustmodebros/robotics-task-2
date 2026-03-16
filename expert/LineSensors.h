@@ -26,40 +26,38 @@ const int sensor_pins[ NUM_SENSORS ] = { A11, A0, A2, A3, A4 };
 
 // Class to operate the linesensors.
 class LineSensors_c {
-  
-  public:
-
-    // Store your readings into this array.
-    // You can then access these readings elsewhere
-    // by using the syntax line_sensors.readings[n];
-    // Where n is a value [0:4]
+  private:
     float readings[ NUM_SENSORS ];
+    float minimum[ NUM_SENSORS ] = {1024.0, 1024.0, 1024.0, 1024.0, 1024.0};
+    float maximum[ NUM_SENSORS ] = {0.0, 0.0, 0.0, 0.0, 0.0};
 
-    // Variables to store calibration constants. 
-    // Make use of these as a part of the exercises 
-    // in labsheet 2.
-    float minimum[ NUM_SENSORS ];
-    float maximum[ NUM_SENSORS ];
-    float scaling[ NUM_SENSORS ];
-
-    // Variable to store the calculated calibrated
-    // (corrected) readings. Needs to be updated via
-    // a function call, which is completed in 
-    // labsheet 2.
     float calibrated[ NUM_SENSORS ];
-
     bool onLine[ NUM_SENSORS];
 
+    void readSensorsADC() {
+      for(int sensor = 0; sensor < NUM_SENSORS; sensor++) {
+        readings[sensor] = analogRead(sensor_pins[sensor]);
+      }
+    }    
+
+    void calcCalibratedADC() {
+      // Get latest readings (raw values)
+      readSensorsADC();
+      float min;
+      // Apply calibration values, store in calibrated[]
+      for(int sensor = 0; sensor < NUM_SENSORS; sensor++) {
+        min = minimum[sensor];
+        calibrated[sensor] = (readings[sensor] - min) / (maximum[sensor]- min);
+      }
+      
+    } // End of calcCalibratedADC()
+
+  public:
     // Constructor, must exist.
     LineSensors_c() {
       // leave this empty
     }
 
-    // Refer to Labsheet 2: Approach 1
-    // Fix areas marked ????
-    // Use this function to setup the pins required
-    // to perform a read of the line sensors using
-    // the ADC.
     void initialiseForADC() {
 
       // Ensure that the IR LEDs are on
@@ -70,74 +68,25 @@ class LineSensors_c {
       // Configure the line sensor pins
       // DN1, DN2, DN3, DN4, DN5.
       for( int sensor = 0; sensor < NUM_SENSORS; sensor++ ) {
-              pinMode( sensor_pins[sensor], INPUT_PULLUP );
+        pinMode( sensor_pins[sensor], INPUT_PULLUP );
       }
-      
-    } // End of initialiseForADC()
-
-
-
-    // Refer to Labsheet 2: Approach 1
-    // Fix areas marked ????
-    // This function is as simple as using a call to 
-    // analogRead()
-    void readSensorsADC() {
-
-      // First, initialise the pins.
-      // You need to complete this function (above).
-      initialiseForADC();
-
-      for( int sensor = 0; sensor < NUM_SENSORS; sensor++ ) {
-               readings[sensor] = analogRead(sensor_pins[sensor]);
-      }
-
-    } // End of readSensorsADC()
-
-    
-
-    // Use this function to apply the calibration values
-    // that were captured in your calibration routine.
-    // Therefore, you will need to write a calibration
-    // routine (see Labsheet 2)
-    void calcCalibratedADC( float min_values[NUM_SENSORS], float max_values[NUM_SENSORS]) {
-
-      // Get latest readings (raw values)
-      readSensorsADC();
-
-      // Apply calibration values, store in calibrated[]
-      for( int sensor = 0; sensor < NUM_SENSORS; sensor++ ) {
-              calibrated[sensor] = (readings[sensor] - min_values[sensor]) / (max_values[sensor]- min_values[sensor]);
-      }
-      
-    } // End of calcCalibratedADC()
-
-
+    }
 
     void updateOnLine(float min_values[NUM_SENSORS], float max_values[NUM_SENSORS]){
-      calcCalibratedADC( min_values, max_values);
+      calcCalibratedADC();
       for (int i=0; i<NUM_SENSORS; i++){
         onLine[i] = calibrated[i] < 0.5;
       }
     }
 
-  
-    // Part of the Advanced Exercises for Labsheet 2
-    void initialiseForDigital() {
-      
-      // Ensure that the IR LEDs are on
-      // for line sensing
-      pinMode( EMIT_PIN, OUTPUT );
-      digitalWrite( EMIT_PIN, HIGH );
-
-    } // End of initialiseForDigital()
-
-    // Part of the Advanced Exercises for Labsheet 2
-    void readSensorsDigital() {
-    //  ???
-    } // End of readSensorsDigital()
+    void calibrate() {
+      readSensorsADC();
+      for (int i = 0; i < 5; i++) {
+        maximum[i] = max(readings[i], maximum[i]);
+        minimum[i] = min(readings[i], minimum[i]);
+      }
+    }
 
 }; // End of LineSensor_c class defintion
-
-
 
 #endif
