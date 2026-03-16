@@ -71,7 +71,7 @@ class Motors_c {
       return;
     }
 
-    void stopAfterTurn(float left_bias, float right_bias, float fwd_bias_pwm, float turn_pwm, unsigned long duration_ms) {
+    void setPWMAfterTurn(float left_bias, float right_bias) {
       setPWM(left_bias, right_bias);
       is_stopped = false;
     }

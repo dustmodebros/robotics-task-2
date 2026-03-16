@@ -65,9 +65,9 @@ unsigned long now;
 // Computes left/right wheel PWM from forward bias and turn amount.
 // Positive turn_pwm = turn right, negative = turn left.
 void computeTurnBias(float fwd_bias_pwm, float turn_pwm, float& left_bias, float& right_bias) {
-  float turn_amount = turn_pwm * fwd_bias_pwm;
-  float remove_from_right = (turn_pwm > 0) ? abs(turn_amount) : 0;
-  float remove_from_left = (turn_pwm <= 0) ? abs(turn_amount) : 0;
+  const float turn_amount = turn_pwm * fwd_bias_pwm;
+  const float remove_from_right = (turn_pwm > 0) ? abs(turn_amount) : 0;
+  const float remove_from_left = (turn_pwm <= 0) ? abs(turn_amount) : 0;
   right_bias = fwd_bias_pwm - 2 * remove_from_right;
   left_bias = fwd_bias_pwm - 2 * remove_from_left;
 }
@@ -76,7 +76,6 @@ void setTravel(float x, float y) {
   target_x = x;
   target_y = y;
 }
-
 
 // stop_distance_mm: when > 0, stop when within this many mm of target. When <= 0, use POSITION_TOLERANCE.
 // returns affirmative if we've reached our destination
@@ -116,7 +115,7 @@ bool checkTurn() {
   const float turn_gain = 1;
   if(abs(angle_diff) > TURNING_SENSITIVITY) {
     if (millis() > travel_ts + travel_ms){
-      angle_diff = angle_diff * turn_gain;
+      angle_diff *= turn_gain;
       // Generate a speed demand for rotation
       // based on a demand and measured theta
       // angle from kinematics.
@@ -154,7 +153,7 @@ void setTurn(float fwd_bias_pwm, float turn_pwm, unsigned long duration_ms) {
   float left_bias, right_bias;
   computeTurnBias(fwd_bias_pwm, turn_pwm, left_bias, right_bias);
   demand.stop_moving_at = millis() + duration_ms;
-  motors.stopAfterTurn(left_bias, right_bias, fwd_bias_pwm, turn_pwm, duration_ms);
+  motors.setPWMAfterTurn(left_bias, right_bias);
 }
 
 void obeyDemand() {
@@ -166,25 +165,24 @@ void obeyDemand() {
 void doSearch() {
   if (checkTravel()){
     waypoints.increment();
-    setTravel(waypoints.current_x(), waypoints.current_x());
+    setTravel(waypoints.current_x(), waypoints.current_y());
   }
   if (magnetometer.convertToMagnitude() > 2.7){
-    setTurn(-0.2,0,400);
-    current_state = BACKING_UP;
+    current_state = FOUND_CUP;
+    demand.enable_demand_ts = millis() - demand.enable_demand_ms + 500;
+    demand.enable_demand = false;
+    motors.setPWM(0,0);
   }
 }
 
 void doFoundCup() {
-  current_state = FOUND_CUP;
-  demand.enable_demand_ts = millis() - demand.enable_demand_ms + 500;
-  demand.enable_demand = false;
-  motors.setPWM(0,0);
+  setTurn(-0.2,0,400);
+  current_state = BACKING_UP;
 }
 
 void doBackingUp() {
-  if (motors.checkMoving(demand.stop_moving_at)){
-    current_state = GOTO_BEHIND_CUP;
-  }
+  if (!motors.checkMoving(demand.stop_moving_at)){return;}
+  current_state = GOTO_BEHIND_CUP;
 }
 
 void doGotoBehindCup() {
