@@ -16,6 +16,7 @@ int current_state = 0;
 #define DEBUG_OUTPUTS false    // prints pulse durations (read and sync) to serial monitor
 #define DEBUG_INPUTS false    // prints raw sensor readings and indications of sync/read to plotter
 #define DEBUG_STATES false     // prints what state the receiver is in
+#define DEBUG_RAW true
 int debug_currently_reading = 0;
 int debug_currently_syncing = 0;
 int debug_currently_checksum = 0;
@@ -46,6 +47,10 @@ byte received_checksum = 0;
 
 // BASELINE SENSITIVITY
 #define BASELINE_UPDATE_RATIO 16
+
+//spike autocompute
+unsigned long prev_read_left;
+unsigned long prev_read_right;
 
 void setup() {
   Serial.begin(115200);
@@ -88,7 +93,7 @@ unsigned long measureSensor(int pin) {
 
   unsigned long start_time = micros();
   while (digitalRead(pin) == HIGH) {
-    if (micros() - start_time > 16000) break; //timeout if read is taking too long (low light)
+    if (micros() - start_time > 320000) break; //timeout if read is taking too long (low light)
   }
   return micros() - start_time;
 }
@@ -233,7 +238,7 @@ void loop() {
               break;
             }
 
-            if (!DEBUG_INPUTS) {
+            if (!DEBUG_INPUTS and !DEBUG_RAW) {
               Serial.print("received byte: 0x");
               Serial.print(data, BIN);
               Serial.print(" from ");
@@ -282,6 +287,22 @@ void loop() {
     Serial.print(debug_currently_syncing);
     Serial.print(",\t");
     Serial.println(debug_currently_checksum);
+  }
+  if (DEBUG_RAW) {
+    if (measurement_left > prev_read_left * 1.04){
+      Serial.print(prev_read_left);
+      Serial.print(", ");
+      Serial.print(((double)measurement_left-(double)prev_read_left)/(double)prev_read_left, 6);
+      Serial.println("");
+    }
+    if (measurement_right > prev_read_right * 1.04){
+      Serial.print(prev_read_right);
+      Serial.print(", ");
+      Serial.print(((double)measurement_right-(double)prev_read_right)/(double)prev_read_right, 6);
+      Serial.println("");
+    }
+    prev_read_left = measurement_left;
+    prev_read_right = measurement_right;
   }
 
 }
